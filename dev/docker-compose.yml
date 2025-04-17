@@ -1,0 +1,10 @@
+services:
+    splunk-siem:
+        container_name: splunk-siem-crowdsec
+        image: splunk/splunk:latest
+        ports:
+            - '8000:8000'
+        env_file:
+            - .env
+        volumes:
+            - ../:/opt/splunk/etc/apps/crowdsec-splunk-app:rw
