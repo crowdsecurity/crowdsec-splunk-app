@@ -166,3 +166,5 @@ cython_debug/
 metadata/local.meta
 local/*
 appinspect-output.json
+.appinspect-tar-exclude
+dev/*tgz

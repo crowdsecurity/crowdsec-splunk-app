@@ -5,6 +5,13 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
+- [Local Development](#local-development)
+  - [Prepare local environment](#prepare-local-environment)
+  - [Install Python Splunk SDK](#install-python-splunk-sdk)
+  - [Run docker](#run-docker)
+  - [Test the app](#test-the-app)
+- [Inspect your app locally](#inspect-your-app-locally)
+- [Some resources for developers](#some-resources-for-developers)
 - [Update documentation table of contents](#update-documentation-table-of-contents)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -53,6 +60,30 @@ Then, refer to CrowdSec documentation to configure the app: https://docs.crowdse
 
 (No need to install the app, it is already installed in the container)
 
+## Inspect your app locally
+
+Splunk provides an API to validate your app.
+
+First, we need to create a package of the app:
+
+```bash
+./splunk_package.sh
+```
+
+Then, we can ask Splunk API to create a report of the package:
+
+```bash
+./splunk_appinspect.sh "<SPLUNKBASE_USERNAME>" "<SPLUNKBASE_PASSWORD>"
+```
+
+As a result, you will get a report in `appinspect-output.json` file in the `dev` folder.
+
+
+
+## Some resources for developers
+
+- https://dev.splunk.com/enterprise/docs/welcome/
+
 
 ## Update documentation table of contents
 
@@ -69,3 +100,8 @@ Then, run it in the documentation folder:
 ```bash
 doctoc dev/README.md --maxlevel 4
 ```
+
+
+## Release process
+
+
