@@ -7,12 +7,12 @@
 
 - [Local Development](#local-development)
   - [Prepare local environment](#prepare-local-environment)
-  - [Install Python Splunk SDK](#install-python-splunk-sdk)
   - [Run docker](#run-docker)
   - [Test the app](#test-the-app)
 - [Inspect your app locally](#inspect-your-app-locally)
 - [Some resources for developers](#some-resources-for-developers)
 - [Update documentation table of contents](#update-documentation-table-of-contents)
+- [Release process](#release-process)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -24,19 +24,13 @@
 Copy `.env.example` to `.env` and set all variables.
 
 
-### Install Python Splunk SDK
-
-```bash
-make add-sdk
-```
-
 ### Run docker
 
 ```bash
 docker compose up -d
 ```
 
-When the container is created, Splunk set all permissions to `splunk_user:splunk_user`, 
+When the container is created, [Splunk set all permissions](https://github.com/splunk/docker-splunk/blob/develop/docs/SECURITY.md#splunk-home-ownership) to `splunk` user and group.
 so you need to change the ownership of the folder to your user:
 
 ```bash
@@ -113,5 +107,13 @@ doctoc dev/README.md --maxlevel 4
 
 
 ## Release process
+
+Before releasing a new version, ensure that you have updated the Splunk SDK to the latest version.
+
+You can do this by running the following command:
+
+```bash
+make add-sdk
+```
 
 
