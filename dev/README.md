@@ -64,13 +64,23 @@ Then, refer to CrowdSec documentation to configure the app: https://docs.crowdse
 
 Splunk provides an API to validate your app.
 
-First, we need to create a package of the app:
+First, we need to create a package of the app.
+
+Ensure that your Python version is the correct one.
+
+Then install the Packaging Toolkit CLI:
+
+```bash
+pip install splunk-packaging-toolkit
+```
+Run the script to create a package of the app in the dev folder:
+
 
 ```bash
 ./splunk_package.sh
 ```
 
-Then, we can ask Splunk API to create a report of the package:
+Finally, we can ask Splunk API to create a report of the package:
 
 ```bash
 ./splunk_appinspect.sh "<SPLUNKBASE_USERNAME>" "<SPLUNKBASE_PASSWORD>"

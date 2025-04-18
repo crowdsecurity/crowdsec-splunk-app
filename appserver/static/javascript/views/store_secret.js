@@ -1,6 +1,5 @@
 "use strict";
 
-import * as Splunk from './splunk_helpers.js'
 import * as Config from './setup_configuration.js'
 
 export async function perform(splunk_js_sdk, setup_options) {
@@ -27,12 +26,10 @@ export async function perform(splunk_js_sdk, setup_options) {
             name: "api_key", 
             realm: "crowdsec-splunk-app_realm", 
             password: password}, 
-            function(err, storagePassword) {
-                if (err) 
-                    {console.warn(err);}
-                else {
-                 console.log(storagePassword.properties());
-                 }
+            function(err) {
+                if (err) {
+                    console.warn(err);
+                }
            });
       
         await Config.complete_setup(service);

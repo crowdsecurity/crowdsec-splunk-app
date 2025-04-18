@@ -7,6 +7,13 @@
 # Set the path to the directory you want to archive (passed as argument, or default)
 SOURCE_PATH="${1:-../../crowdsec-splunk-app}"
 
+echo "Browse to the directory $SOURCE_PATH ..."
+cd "$SOURCE_PATH" || { echo "Directory $SOURCE_PATH not found"; exit 1; }
 
-echo "Creating the package crowdsec-splunk-app.tgz from $SOURCE_PATH ..."
-tar --exclude-from=.appinspect-tar-exclude -czvf crowdsec-splunk-app.tgz "$SOURCE_PATH"
+echo "Use slim to create the package from $SOURCE_PATH ..."
+slim package .
+
+echo "Moving the package to the current directory ..."
+mv crowdsec-splunk-app-*.tar.gz  dev/crowdsec-splunk-app.tar.gz
+
+echo "Package crowdsec-splunk-app.tar.gz created successfully in dev folder."
