@@ -28,7 +28,6 @@ REPORT_HREF=$(curl -s -X POST \
   -H "Authorization: bearer $TOKEN" \
   -H "Cache-Control: no-cache" \
   -F "app_package=@$APP_PACKAGE" \
-  -F "included_tags=cloud,ast,manual" \
   --url "https://appinspect.splunk.com/v1/app/validate" | jq -r .links[1].href)
 
 if [[ -z "$REPORT_HREF" || "$REPORT_HREF" == "null" ]]; then

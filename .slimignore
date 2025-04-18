@@ -1,10 +1,7 @@
 .git*
 __pycache__/
 *.pyc
-.vscode/
-tests/
 Makefile
-*.DS_Store
 .python-version
 local
 metadata/local.meta
