@@ -13,6 +13,9 @@
 - [Some resources for developers](#some-resources-for-developers)
 - [Update documentation table of contents](#update-documentation-table-of-contents)
 - [Release process](#release-process)
+  - [Splunk SDK](#splunk-sdk)
+  - [Final check](#final-check)
+  - [Create a release](#create-a-release)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -108,6 +111,8 @@ doctoc dev/README.md --maxlevel 4
 
 ## Release process
 
+### Splunk SDK
+
 Before releasing a new version, ensure that you have updated the Splunk SDK to the latest version.
 
 You can do this by running the following command:
@@ -115,5 +120,32 @@ You can do this by running the following command:
 ```bash
 make add-sdk
 ```
+
+### Final check
+
+We use [Semantic Versioning](https://semver.org/spec/v2.0.0.html) approach to determine the next version number of the SDK.
+
+Once you are ready to release a new version (e.g. when all your changes are on the `main` branch), you should:
+
+- Determine the next version number based on the changes made since the last release: `MAJOR.MINOR.PATCH`
+- Update the [CHANGELOG.md](../CHANGELOG.md) file with the new version number and the changes made since the last release.
+  - Each release description must respect the same format as the previous ones.
+- Update the `default/app.conf` file with the new version number.
+- Update the `app.manifest` file with the new version number by running the following command in the root folder of the project:
+
+```bash
+slim generate-manifest . --output=app.manifest
+```
+
+
+- Commit the changes with a message like `feat(*) Prepare release MAJOR.MINOR.PATCH`.
+
+### Create a release
+
+- Browse to the [GitHub `Create and publish release` action](https://github.com/crowdsecurity/crowdsec-splunk-app/actions/workflows/release.yml)
+    - Click on `Run workflow` and fill the `Tag name` input with the new version number prefixed by a `v`: `vMAJOR.MINOR.PATCH`.
+    - Tick the `Publish to Splunkbase` checkbox.
+    - Click on `Run workflow` to trigger the release process.
+
 
 

@@ -8,31 +8,35 @@ on:
     branches: [ main ]
     paths-ignore:
       - '**.md'
+  schedule:
+    - cron: '25 02 * * THU'
   workflow_dispatch:
 
 jobs:
-  deploy:
+  appinspect:
+    name: App inspect tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9.16'
-      
+
       - name: Install Splunk Packaging Toolkit
         run: |
           curl https://download.splunk.com/misc/packaging-toolkit/splunk-packaging-toolkit-1.0.1.tar.gz -o /tmp/spl.tar.gz
           pip install /tmp/spl.tar.gz
-      
+
       - name: Create Splunk App Package
         run: |
-          rm -rf .git .github .gitignore
           slim package .
-          cp crowdsec-splunk-app-*.tar.gz  /tmp/crowdsec-splunk-app.tar.gz
-      
+          mv crowdsec-splunk-app-*.tar.gz  /tmp/crowdsec-splunk-app.tar.gz
+
       - name: Retrieve App Inspect Report
         run: |
           TOKEN=$(curl -u '${{ secrets.SPLUNKBASE_USERNAME }}:${{ secrets.SPLUNKBASE_PASSWORD }}' --url 'https://api.splunk.com/2.0/rest/login/splunk' | jq -r .data.token)
@@ -43,20 +47,21 @@ jobs:
           -F "app_package=@/tmp/crowdsec-splunk-app.tar.gz" \
           --url "https://appinspect.splunk.com/v1/app/validate"| jq -r .links[1].href)
           REPORT_URL="https://appinspect.splunk.com$REPORT_HREF"
-          sleep 60
+          sleep 30
           curl -X GET \
           -H "Authorization: bearer $TOKEN" \
-          --url $REPORT_URL > /tmp/report
-      
+          --url $REPORT_URL > /tmp/report.json
+
       - name: Upload App Inspect Report
         uses: actions/upload-artifact@v4
         with:
-          name: report
-          path: /tmp/report
-      
+          name: Appinspect Report
+          path: /tmp/report.json
+          retention-days: 7
+
       - name: Check App Inspect Report Results
         run: |
-          if grep -q '"result": "failure"' /tmp/report; then
+          if grep -q '"result": "failure"' /tmp/report.json; then
               echo "::error::App inspect check failed"
               exit 1
           else
