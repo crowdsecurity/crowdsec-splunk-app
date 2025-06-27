@@ -96,7 +96,7 @@ jobs:
               exit 1
           fi
           # Check in appserver/static/javascript/setup_page.js
-          # Example: version=1.0.6
+          # Example: v=v1.0.6
           JS_VERSION=$(sed -n 's/urlArgs\: "v=v\(.*\)"/\1/p' appserver/static/javascript/setup_page.js | sed 's/ //g' | tr -d '\r')
           if [[ $JS_VERSION == "${{ env.VERSION_NUMBER }}" ]]
           then
