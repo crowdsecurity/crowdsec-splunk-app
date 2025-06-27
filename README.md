@@ -1,4 +1,5 @@
 ![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fsplunkbasebadge.livehybrid.com%2Fv1%2Fdownloads%2F6800)
+[![App Inspect](https://github.com/crowdsecurity/crowdsec-splunk-app/actions/workflows/appinspect.yml/badge.svg)](https://github.com/crowdsecurity/crowdsec-splunk-app/actions/workflows/appinspect.yml)
 ![Cloud Compatible](https://img.shields.io/endpoint?logo=icloud&url=https%3A%2F%2Fsplunkbasebadge.livehybrid.com%2Fv1%2Fsplunkcloud%2F6800)
 ![Compatibility](https://img.shields.io/endpoint?url=https%3A%2F%2Fsplunkbasebadge.livehybrid.com%2Fv1%2Flatest_compat%2F6800)
 ## Overview

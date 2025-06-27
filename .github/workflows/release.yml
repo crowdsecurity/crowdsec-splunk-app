@@ -44,7 +44,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check version ${{ env.VERSION_NUMBER }} consistency in files
-        # CHANGELOG.md, app.manifest, default/app.conf
+        # CHANGELOG.md, app.manifest, default/app.conf, appserver/static/javascript/setup_page.js
         run: |
           # Check top ## [VERSION_NUMBER](GITHUB_URL/releases/tag/vVERSION_NUMBER) - yyyy-mm-dd in CHANGELOG.md
           # Example: ## [0.0.2](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v0.0.2) - 2024-02-07
@@ -93,6 +93,17 @@ jobs:
           else
               echo "app.conf VERSION KO"
               echo $APP_CONF_VERSION
+              exit 1
+          fi
+          # Check in appserver/static/javascript/setup_page.js
+          # Example: version=1.0.6
+          JS_VERSION=$(sed -n 's/urlArgs\: "v=v\(.*\)"/\1/p' appserver/static/javascript/setup_page.js | sed 's/ //g' | tr -d '\r')
+          if [[ $JS_VERSION == "${{ env.VERSION_NUMBER }}" ]]
+          then
+              echo "appserver/static/javascript/setup_page.js VERSION OK"
+          else
+              echo "appserver/static/javascript/setup_page.js VERSION KO"
+              echo $JS_VERSION
               exit 1
           fi
 

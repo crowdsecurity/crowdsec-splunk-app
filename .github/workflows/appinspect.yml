@@ -95,5 +95,6 @@ jobs:
               echo "::error::App inspect check failed"
               exit 1
           else
+              echo "App inspect check passed"
               exit 0
           fi

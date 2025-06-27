@@ -57,6 +57,15 @@ Then, refer to CrowdSec documentation to configure the app: https://docs.crowdse
 
 (No need to install the app, it is already installed in the container)
 
+
+## Test Javascript and CSS code
+
+Every time you change the Javascript or CSS code, you can browse to `http://localhost:8000/en_US/_bump`.
+Click on the `Bump version` button to reload the app with the new code.
+
+You can also try `http://localhost:8000/en_US/debug/refresh` if it does not work.
+
+
 ## Inspect your app locally
 
 Splunk provides an API to validate your app.
@@ -131,6 +140,7 @@ Once you are ready to release a new version (e.g. when all your changes are on t
 - Update the [CHANGELOG.md](../CHANGELOG.md) file with the new version number and the changes made since the last release.
   - Each release description must respect the same format as the previous ones.
 - Update the `default/app.conf` file with the new version number.
+- Update the `appserver/static/javascript/setup_pages.js` file with the new version number.
 - Update the `app.manifest` file with the new version number by running the following command in the root folder of the project:
 
 ```bash
