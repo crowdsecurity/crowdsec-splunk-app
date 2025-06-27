@@ -13,6 +13,17 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ---
 
+## [1.2.1](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.1) - 2025-06-27
+
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.0...v1.2.1)
+
+
+### Fixed
+
+- Make API key editable in the UI
+
+---
+
 ## [1.2.0](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.0) - 2025-05-16
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.1.1...v1.2.0)
