@@ -170,3 +170,4 @@ local/*
 appinspect-output.json
 .appinspect-tar-exclude
 dev/*tar.gz
+.claude

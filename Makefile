@@ -1,5 +1,5 @@
 PYTHON=python3.9
-SDK_VERSION=2.1.0
+SDK_VERSION=2.1.1
 TARGET_DIR=bin/splunklib
 TMP_DIR=/tmp/splunk-sdk
 
