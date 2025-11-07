@@ -153,5 +153,4 @@ from .streaming_command import StreamingCommand
 from .eventing_command import EventingCommand
 from .reporting_command import ReportingCommand
 
-from .external_search_command import execute, ExternalSearchCommand
 from .search_command import dispatch, SearchMetric
