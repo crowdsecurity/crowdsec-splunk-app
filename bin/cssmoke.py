@@ -3,14 +3,6 @@
 import sys
 import os
 import requests as req
-from splunklib.searchcommands import (
-    dispatch,
-    StreamingCommand,
-    Configuration,
-    Option,
-    validators,
-)
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from splunklib.searchcommands import (
     dispatch,
@@ -20,76 +12,67 @@ from splunklib.searchcommands import (
     validators,
 )
 
-def attach_resp_to_event(event, data):
-    event["crowdsec_reputation"] = data["reputation"]
-    event["crowdsec_confidence"] = data["confidence"]
-    event["crowdsec_ip_range_score"] = data["ip_range_score"]
-    event["crowdsec_ip"] = data["ip"]
-    event["crowdsec_ip_range"] = data["ip_range"]
-    event["crowdsec_ip_range_24"] = data["ip_range_24"]
-    event["crowdsec_ip_range_24_reputation"] = data["ip_range_24_reputation"]
-    event["crowdsec_ip_range_24_score"] = data["ip_range_24_score"]
-    event["crowdsec_as_name"] = data["as_name"]
-    event["crowdsec_as_num"] = data["as_num"]
+def attach_resp_to_event(event, data, ipfield, allowed_fields=None):
+    allowed = set(allowed_fields) if allowed_fields else None
 
-    event["crowdsec_country"] = data["location"]["country"]
-    event["crowdsec_city"] = data["location"]["city"]
-    event["crowdsec_latitude"] = data["location"]["latitude"]
-    event["crowdsec_longitude"] = data["location"]["longitude"]
-    event["crowdsec_reverse_dns"] = data["reverse_dns"]
+    mapped_fields = {
+        f"crowdsec_{ipfield}_reputation": data["reputation"],
+        f"crowdsec_{ipfield}_confidence": data["confidence"],
+        f"crowdsec_{ipfield}_ip_range_score": data["ip_range_score"],
+        f"crowdsec_{ipfield}_ip": data["ip"],
+        f"crowdsec_{ipfield}_ip_range": data["ip_range"],
+        f"crowdsec_{ipfield}_ip_range_24": data["ip_range_24"],
+        f"crowdsec_{ipfield}_ip_range_24_reputation": data["ip_range_24_reputation"],
+        f"crowdsec_{ipfield}_ip_range_24_score": data["ip_range_24_score"],
+        f"crowdsec_{ipfield}_as_name": data["as_name"],
+        f"crowdsec_{ipfield}_as_num": data["as_num"],
+        f"crowdsec_{ipfield}_country": data["location"]["country"],
+        f"crowdsec_{ipfield}_city": data["location"]["city"],
+        f"crowdsec_{ipfield}_latitude": data["location"]["latitude"],
+        f"crowdsec_{ipfield}_longitude": data["location"]["longitude"],
+        f"crowdsec_{ipfield}_reverse_dns": data["reverse_dns"],
+        f"crowdsec_{ipfield}_behaviors": data["behaviors"],
+        f"crowdsec_{ipfield}_mitre_techniques": data["mitre_techniques"],
+        f"crowdsec_{ipfield}_cves": data["cves"],
+        f"crowdsec_{ipfield}_first_seen": data["history"]["first_seen"],
+        f"crowdsec_{ipfield}_last_seen": data["history"]["last_seen"],
+        f"crowdsec_{ipfield}_full_age": data["history"]["full_age"],
+        f"crowdsec_{ipfield}_days_age": data["history"]["days_age"],
+        f"crowdsec_{ipfield}_false_positives": data["classifications"]["false_positives"],
+        f"crowdsec_{ipfield}_classifications": data["classifications"]["classifications"],
+        f"crowdsec_{ipfield}_attack_details": data["attack_details"],
+        f"crowdsec_{ipfield}_target_countries": data["target_countries"],
+        f"crowdsec_{ipfield}_background_noise": data["background_noise"],
+        f"crowdsec_{ipfield}_background_noise_score": data["background_noise_score"],
+        f"crowdsec_{ipfield}_overall_aggressiveness": data["scores"]["overall"]["aggressiveness"],
+        f"crowdsec_{ipfield}_overall_threat": data["scores"]["overall"]["threat"],
+        f"crowdsec_{ipfield}_overall_trust": data["scores"]["overall"]["trust"],
+        f"crowdsec_{ipfield}_overall_anomaly": data["scores"]["overall"]["anomaly"],
+        f"crowdsec_{ipfield}_overall_total": data["scores"]["overall"]["total"],
+        f"crowdsec_{ipfield}_last_day_aggressiveness": data["scores"]["last_day"]["aggressiveness"],
+        f"crowdsec_{ipfield}_last_day_threat": data["scores"]["last_day"]["threat"],
+        f"crowdsec_{ipfield}_last_day_trust": data["scores"]["last_day"]["trust"],
+        f"crowdsec_{ipfield}_last_day_anomaly": data["scores"]["last_day"]["anomaly"],
+        f"crowdsec_{ipfield}_last_day_total": data["scores"]["last_day"]["total"],
+        f"crowdsec_{ipfield}_last_week_aggressiveness": data["scores"]["last_week"]["aggressiveness"],
+        f"crowdsec_{ipfield}_last_week_threat": data["scores"]["last_week"]["threat"],
+        f"crowdsec_{ipfield}_last_week_trust": data["scores"]["last_week"]["trust"],
+        f"crowdsec_{ipfield}_last_week_anomaly": data["scores"]["last_week"]["anomaly"],
+        f"crowdsec_{ipfield}_last_week_total": data["scores"]["last_week"]["total"],
+        f"crowdsec_{ipfield}_last_month_aggressiveness": data["scores"]["last_month"]["aggressiveness"],
+        f"crowdsec_{ipfield}_last_month_threat": data["scores"]["last_month"]["threat"],
+        f"crowdsec_{ipfield}_last_month_trust": data["scores"]["last_month"]["trust"],
+        f"crowdsec_{ipfield}_last_month_anomaly": data["scores"]["last_month"]["anomaly"],
+        f"crowdsec_{ipfield}_last_month_total": data["scores"]["last_month"]["total"],
+        f"crowdsec_{ipfield}_references": data["references"],
+    }
 
-    event["crowdsec_behaviors"] = data["behaviors"]
+    for field, value in mapped_fields.items():
+        #remove the 'crowdsec_' prefix for allowed fields check
+        short_field = field[len(f"crowdsec_{ipfield}_"):]
+        if allowed is None or short_field in allowed:
+            event[field] = value
 
-    event["crowdsec_mitre_techniques"] = data["mitre_techniques"]
-    event["crowdsec_cves"] = data["cves"]
-
-    event["crowdsec_first_seen"] = data["history"]["first_seen"]
-    event["crowdsec_last_seen"] = data["history"]["last_seen"]
-    event["crowdsec_full_age"] = data["history"]["full_age"]
-    event["crowdsec_days_age"] = data["history"]["days_age"]
-
-    event["crowdsec_false_positives"] = data["classifications"]["false_positives"]
-    event["crowdsec_classifications"] = data["classifications"]["classifications"]
-
-    # attack_details
-    event["crowdsec_attack_details"] = data["attack_details"]
-
-    # target_countries
-    event["crowdsec_target_countries"] = data["target_countries"]
-
-    # background_noise_score
-    event["crowdsec_background_noise"] = data["background_noise"]
-    event["crowdsec_background_noise_score"] = data["background_noise_score"]
-
-    # overall
-    event["crowdsec_overall_aggressiveness"] = data["scores"]["overall"]["aggressiveness"]
-    event["crowdsec_overall_threat"] = data["scores"]["overall"]["threat"]
-    event["crowdsec_overall_trust"] = data["scores"]["overall"]["trust"]
-    event["crowdsec_overall_anomaly"] = data["scores"]["overall"]["anomaly"]
-    event["crowdsec_overall_total"] = data["scores"]["overall"]["total"]
-
-    # last_day
-    event["crowdsec_last_day_aggressiveness"] = data["scores"]["last_day"]["aggressiveness"]
-    event["crowdsec_last_day_threat"] = data["scores"]["last_day"]["threat"]
-    event["crowdsec_last_day_trust"] = data["scores"]["last_day"]["trust"]
-    event["crowdsec_last_day_anomaly"] = data["scores"]["last_day"]["anomaly"]
-    event["crowdsec_last_day_total"] = data["scores"]["last_day"]["total"]
-
-    # last_week
-    event["crowdsec_last_week_aggressiveness"] = data["scores"]["last_week"]["aggressiveness"]
-    event["crowdsec_last_week_threat"] = data["scores"]["last_week"]["threat"]
-    event["crowdsec_last_week_trust"] = data["scores"]["last_week"]["trust"]
-    event["crowdsec_last_week_anomaly"] = data["scores"]["last_week"]["anomaly"]
-    event["crowdsec_last_week_total"] = data["scores"]["last_week"]["total"]
-
-    # last_month
-    event["crowdsec_last_month_aggressiveness"] = data["scores"]["last_month"]["aggressiveness"]
-    event["crowdsec_last_month_threat"] = data["scores"]["last_month"]["threat"]
-    event["crowdsec_last_month_trust"] = data["scores"]["last_month"]["trust"]
-    event["crowdsec_last_month_anomaly"] = data["scores"]["last_month"]["anomaly"]
-    event["crowdsec_last_month_total"] = data["scores"]["last_month"]["total"]
-    # references
-    event["crowdsec_references"] = data["references"]
     return event
 
 
@@ -115,6 +98,12 @@ class CsSmokeCommand(StreamingCommand):
         require=True,
         validate=validators.Fieldname(),
     )
+    fields = Option(
+        doc="""
+        **Syntax:** **fields=***<field1,field2,...>*
+        **Description:** Optional comma-separated list of CrowdSec fields to include in the response""",
+        require=False,
+    )
 
     def stream(self, events):
         api_key = ""
@@ -132,6 +121,12 @@ class CsSmokeCommand(StreamingCommand):
             "User-Agent": "crowdSec-splunk-app/v1.0.0",
         }
 
+        allowed_fields = None
+        if self.fields:
+            allowed_fields = [field.strip() for field in self.fields.split(",") if field.strip()]
+            if not allowed_fields:
+                allowed_fields = None
+
         for event in events:
             event_dest_ip = event[self.ipfield]
             event["crowdsec_error"] = "None"
@@ -148,7 +143,7 @@ class CsSmokeCommand(StreamingCommand):
             )
             if response.status_code == 200:
                 data = response.json()
-                event = attach_resp_to_event(event, data)
+                event = attach_resp_to_event(event, data, self.ipfield, allowed_fields)
             elif response.status_code == 429:
                 event["crowdsec_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
             else:
