@@ -113,7 +113,6 @@ class CsSmokeCommand(StreamingCommand):
     )
 
     def stream(self, events):
-        #log("Starting CrowdSec Smoke Command")
         api_key = ""
         for passw in self.service.storage_passwords.list():
             if passw.name == "crowdsec-splunk-app_realm:api_key:":
@@ -138,13 +137,11 @@ class CsSmokeCommand(StreamingCommand):
         batching_enabled, batch_size = self._load_batching_settings()
 
         max_batch_size = batch_size if batching_enabled else 1
-        self.logger.info("CrowdSec Smoke Command: batching_enabled=%s, batch_size=%d", batching_enabled, max_batch_size)
         yield from self._process_events(events, headers, allowed_fields, max_batch_size)
 
 
     
     def _enrich_single_event(self, event, event_dest_ip, headers, allowed_fields):
-        event[f"crowdsec_{self.ipfield}_error"] = "None"
         params = (
             ("ipAddress", event_dest_ip),
             ("verbose", ""),
@@ -159,6 +156,9 @@ class CsSmokeCommand(StreamingCommand):
             event = attach_resp_to_event(event, data, self.ipfield, allowed_fields)
         elif response.status_code == 429:
             event[f"crowdsec_{self.ipfield}_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+        elif response.status_code == 404:
+            event[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+            event[f"crowdsec_{self.ipfield}_confidence"] = "none"
         else:
             event[f"crowdsec_{self.ipfield}_error"] = f"Error {response.status_code} : {response.text}"
         return event
@@ -171,10 +171,8 @@ class CsSmokeCommand(StreamingCommand):
                 event[f"crowdsec_{self.ipfield}_error"] = f"Field {self.ipfield} not found on event"
                 yield event
                 continue
-            event[f"crowdsec_{self.ipfield}_error"] = "None"
             buffer.append((event, event_dest_ip))
             if len(buffer) >= batch_size:
-                log(f"Processing {len(buffer)} events with batch_size={batch_size}")
                 yield from self._execute_batch(buffer, headers, allowed_fields)
                 buffer = []
 
@@ -184,13 +182,11 @@ class CsSmokeCommand(StreamingCommand):
     def _execute_batch(self, buffer, headers, allowed_fields):
         if len(buffer) == 1:
             event, ip = buffer[0]
-            log(f"Processing single IP lookup for {ip}")
             yield self._enrich_single_event(event, ip, headers, allowed_fields)
             return
 
         ips = [ip for _, ip in buffer]
         params = {"ips": ",".join(ips)}
-        log(f"Processing batch  lookup for {len(ips)} IPs")
         response = req.get(
             "https://cti.api.crowdsec.net/v2/smoke",
             headers=headers,
@@ -206,7 +202,8 @@ class CsSmokeCommand(StreamingCommand):
                         yield event
                         break
                 else:
-                    event[f"crowdsec_{self.ipfield}_error"] = f"No CrowdSec data returned for {ip}"
+                    event[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+                    event[f"crowdsec_{self.ipfield}_confidence"] = "none"
                     yield event
         elif response.status_code == 429:
             error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
@@ -222,25 +219,12 @@ class CsSmokeCommand(StreamingCommand):
     def _normalize_batch_response(self, data):
         if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
             return data["items"]
-        # if isinstance(data, list):
-        #     normalized = {}
-        #     for entry in data:
-        #         ip = entry.get("ip")
-        #         if ip:
-        #             normalized[ip] = entry
-        #     return normalized
-        # if isinstance(data, dict):
-        #     if "ips" in data and isinstance(data["ips"], dict):
-        #         return data["ips"]
-        #     return {key: value for key, value in data.items() if isinstance(value, dict) and key.count(".") == 3}
-        # return {}
 
     def _load_batching_settings(self):
         batching = False
         batch_size = DEFAULT_BATCH_SIZE
         try:
             for conf in self.service.confs.list():
-                #log(f"Available config: {conf.name}")
                 if conf.name == "crowdsec_settings":
                     stanza = conf.list()[0] #TODO : clean this up
                     if stanza:
@@ -254,7 +238,6 @@ class CsSmokeCommand(StreamingCommand):
                             self.logger.debug("Invalid batch_size '%s' in config, using default", raw_size)
         except Exception as exc:
             self.logger.debug("Unable to load batching settings: %s", exc)
-            log("Unable to load batching settings:", exc)
         return batching, batch_size
 
 
