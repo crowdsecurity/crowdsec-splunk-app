@@ -79,7 +79,7 @@ export async function perform(splunk_js_sdk, setup_options) {
                             throw err;
                         }
                     });
-                console.log("API key stored successfully:");
+                console.log("API key stored successfully");
             }
         } else {
             console.log("No API key supplied. Existing key will be kept as-is.");

@@ -6,7 +6,6 @@ define(["react", "splunkjs/splunk"], function(react, splunk_js_sdk){
   class SetupPage extends react.Component {
     constructor(props) {
       super(props);
-      console.log("SetupPage props");
       this.state = {
         password: '',
         batching: false,
@@ -20,7 +19,6 @@ define(["react", "splunkjs/splunk"], function(react, splunk_js_sdk){
     async componentDidMount() {
       try {
         const settings = await Setup.fetchSettings(splunk_js_sdk);
-        console.log("Fetched existing CrowdSec settings:", settings);
         if (settings) {
           this.setState({
             batching: settings.batching ?? false,

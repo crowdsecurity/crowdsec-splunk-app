@@ -1,6 +1,4 @@
 function promisify(fn) {
-  console.log("promisify: Don't use this in production! Use a proper promisify library instead.")
-
   // return a new promisified function
   return (...args) => {
     return new Promise((resolve, reject) => {
