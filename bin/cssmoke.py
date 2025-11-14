@@ -3,14 +3,6 @@
 import sys
 import os
 import requests as req
-from splunklib.searchcommands import (
-    dispatch,
-    StreamingCommand,
-    Configuration,
-    Option,
-    validators,
-)
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from splunklib.searchcommands import (
     dispatch,
@@ -20,76 +12,74 @@ from splunklib.searchcommands import (
     validators,
 )
 
-def attach_resp_to_event(event, data):
-    event["crowdsec_reputation"] = data["reputation"]
-    event["crowdsec_confidence"] = data["confidence"]
-    event["crowdsec_ip_range_score"] = data["ip_range_score"]
-    event["crowdsec_ip"] = data["ip"]
-    event["crowdsec_ip_range"] = data["ip_range"]
-    event["crowdsec_ip_range_24"] = data["ip_range_24"]
-    event["crowdsec_ip_range_24_reputation"] = data["ip_range_24_reputation"]
-    event["crowdsec_ip_range_24_score"] = data["ip_range_24_score"]
-    event["crowdsec_as_name"] = data["as_name"]
-    event["crowdsec_as_num"] = data["as_num"]
+DEFAULT_BATCH_SIZE = 10
+ALLOWED_BATCH_SIZES = {10, 20, 50, 100}
 
-    event["crowdsec_country"] = data["location"]["country"]
-    event["crowdsec_city"] = data["location"]["city"]
-    event["crowdsec_latitude"] = data["location"]["latitude"]
-    event["crowdsec_longitude"] = data["location"]["longitude"]
-    event["crowdsec_reverse_dns"] = data["reverse_dns"]
+def log(msg, *args):
+    sys.stderr.write(msg + " ".join([str(a) for a in args]) + "\n")
 
-    event["crowdsec_behaviors"] = data["behaviors"]
 
-    event["crowdsec_mitre_techniques"] = data["mitre_techniques"]
-    event["crowdsec_cves"] = data["cves"]
+def attach_resp_to_event(event, data, ipfield, allowed_fields=None):
+    allowed = set(allowed_fields) if allowed_fields else None
 
-    event["crowdsec_first_seen"] = data["history"]["first_seen"]
-    event["crowdsec_last_seen"] = data["history"]["last_seen"]
-    event["crowdsec_full_age"] = data["history"]["full_age"]
-    event["crowdsec_days_age"] = data["history"]["days_age"]
+    prefix = f"crowdsec_{ipfield}_"
+    mapped_fields = {
+        f"{prefix}reputation": data["reputation"],
+        f"{prefix}confidence": data["confidence"],
+        f"{prefix}ip_range_score": data["ip_range_score"],
+        f"{prefix}ip": data["ip"],
+        f"{prefix}ip_range": data["ip_range"],
+        f"{prefix}ip_range_24": data["ip_range_24"],
+        f"{prefix}ip_range_24_reputation": data["ip_range_24_reputation"],
+        f"{prefix}ip_range_24_score": data["ip_range_24_score"],
+        f"{prefix}as_name": data["as_name"],
+        f"{prefix}as_num": data["as_num"],
+        f"{prefix}country": data["location"]["country"],
+        f"{prefix}city": data["location"]["city"],
+        f"{prefix}latitude": data["location"]["latitude"],
+        f"{prefix}longitude": data["location"]["longitude"],
+        f"{prefix}reverse_dns": data["reverse_dns"],
+        f"{prefix}behaviors": data["behaviors"],
+        f"{prefix}mitre_techniques": data["mitre_techniques"],
+        f"{prefix}cves": data["cves"],
+        f"{prefix}first_seen": data["history"]["first_seen"],
+        f"{prefix}last_seen": data["history"]["last_seen"],
+        f"{prefix}full_age": data["history"]["full_age"],
+        f"{prefix}days_age": data["history"]["days_age"],
+        f"{prefix}false_positives": data["classifications"]["false_positives"],
+        f"{prefix}classifications": data["classifications"]["classifications"],
+        f"{prefix}attack_details": data["attack_details"],
+        f"{prefix}target_countries": data["target_countries"],
+        f"{prefix}background_noise": data["background_noise"],
+        f"{prefix}background_noise_score": data["background_noise_score"],
+        f"{prefix}overall_aggressiveness": data["scores"]["overall"]["aggressiveness"],
+        f"{prefix}overall_threat": data["scores"]["overall"]["threat"],
+        f"{prefix}overall_trust": data["scores"]["overall"]["trust"],
+        f"{prefix}overall_anomaly": data["scores"]["overall"]["anomaly"],
+        f"{prefix}overall_total": data["scores"]["overall"]["total"],
+        f"{prefix}last_day_aggressiveness": data["scores"]["last_day"]["aggressiveness"],
+        f"{prefix}last_day_threat": data["scores"]["last_day"]["threat"],
+        f"{prefix}last_day_trust": data["scores"]["last_day"]["trust"],
+        f"{prefix}last_day_anomaly": data["scores"]["last_day"]["anomaly"],
+        f"{prefix}last_day_total": data["scores"]["last_day"]["total"],
+        f"{prefix}last_week_aggressiveness": data["scores"]["last_week"]["aggressiveness"],
+        f"{prefix}last_week_threat": data["scores"]["last_week"]["threat"],
+        f"{prefix}last_week_trust": data["scores"]["last_week"]["trust"],
+        f"{prefix}last_week_anomaly": data["scores"]["last_week"]["anomaly"],
+        f"{prefix}last_week_total": data["scores"]["last_week"]["total"],
+        f"{prefix}last_month_aggressiveness": data["scores"]["last_month"]["aggressiveness"],
+        f"{prefix}last_month_threat": data["scores"]["last_month"]["threat"],
+        f"{prefix}last_month_trust": data["scores"]["last_month"]["trust"],
+        f"{prefix}last_month_anomaly": data["scores"]["last_month"]["anomaly"],
+        f"{prefix}last_month_total": data["scores"]["last_month"]["total"],
+        f"{prefix}references": data["references"],
+    }
 
-    event["crowdsec_false_positives"] = data["classifications"]["false_positives"]
-    event["crowdsec_classifications"] = data["classifications"]["classifications"]
+    for field, value in mapped_fields.items():
+        short_field = field[len(prefix):]
+        if allowed is None or short_field in allowed:
+            event[field] = value
 
-    # attack_details
-    event["crowdsec_attack_details"] = data["attack_details"]
-
-    # target_countries
-    event["crowdsec_target_countries"] = data["target_countries"]
-
-    # background_noise_score
-    event["crowdsec_background_noise"] = data["background_noise"]
-    event["crowdsec_background_noise_score"] = data["background_noise_score"]
-
-    # overall
-    event["crowdsec_overall_aggressiveness"] = data["scores"]["overall"]["aggressiveness"]
-    event["crowdsec_overall_threat"] = data["scores"]["overall"]["threat"]
-    event["crowdsec_overall_trust"] = data["scores"]["overall"]["trust"]
-    event["crowdsec_overall_anomaly"] = data["scores"]["overall"]["anomaly"]
-    event["crowdsec_overall_total"] = data["scores"]["overall"]["total"]
-
-    # last_day
-    event["crowdsec_last_day_aggressiveness"] = data["scores"]["last_day"]["aggressiveness"]
-    event["crowdsec_last_day_threat"] = data["scores"]["last_day"]["threat"]
-    event["crowdsec_last_day_trust"] = data["scores"]["last_day"]["trust"]
-    event["crowdsec_last_day_anomaly"] = data["scores"]["last_day"]["anomaly"]
-    event["crowdsec_last_day_total"] = data["scores"]["last_day"]["total"]
-
-    # last_week
-    event["crowdsec_last_week_aggressiveness"] = data["scores"]["last_week"]["aggressiveness"]
-    event["crowdsec_last_week_threat"] = data["scores"]["last_week"]["threat"]
-    event["crowdsec_last_week_trust"] = data["scores"]["last_week"]["trust"]
-    event["crowdsec_last_week_anomaly"] = data["scores"]["last_week"]["anomaly"]
-    event["crowdsec_last_week_total"] = data["scores"]["last_week"]["total"]
-
-    # last_month
-    event["crowdsec_last_month_aggressiveness"] = data["scores"]["last_month"]["aggressiveness"]
-    event["crowdsec_last_month_threat"] = data["scores"]["last_month"]["threat"]
-    event["crowdsec_last_month_trust"] = data["scores"]["last_month"]["trust"]
-    event["crowdsec_last_month_anomaly"] = data["scores"]["last_month"]["anomaly"]
-    event["crowdsec_last_month_total"] = data["scores"]["last_month"]["total"]
-    # references
-    event["crowdsec_references"] = data["references"]
     return event
 
 
@@ -115,6 +105,12 @@ class CsSmokeCommand(StreamingCommand):
         require=True,
         validate=validators.Fieldname(),
     )
+    fields = Option(
+        doc="""
+        **Syntax:** **fields=***<field1,field2,...>*
+        **Description:** Optional comma-separated list of CrowdSec fields to include in the response""",
+        require=False,
+    )
 
     def stream(self, events):
         api_key = ""
@@ -132,30 +128,117 @@ class CsSmokeCommand(StreamingCommand):
             "User-Agent": "crowdSec-splunk-app/v1.0.0",
         }
 
-        for event in events:
-            event_dest_ip = event[self.ipfield]
-            event["crowdsec_error"] = "None"
-            # API required parameters
-            params = (
-                ("ipAddress", event_dest_ip),
-                ("verbose", ""),
-            )
-            # Make API Request
-            response = req.get(
-                f"https://cti.api.crowdsec.net/v2/smoke/{event_dest_ip}",
-                headers=headers,
-                params=params,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                event = attach_resp_to_event(event, data)
-            elif response.status_code == 429:
-                event["crowdsec_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
-            else:
-                event["crowdsec_error"] = f"Error {response.status_code} : {response.text}"
+        allowed_fields = None
+        if self.fields:
+            allowed_fields = [field.strip() for field in self.fields.split(",") if field.strip()]
+            if not allowed_fields:
+                allowed_fields = None
 
-            # Finalize event
-            yield event
+        batching_enabled, batch_size = self._load_batching_settings()
+
+        max_batch_size = batch_size if batching_enabled else 1
+        yield from self._process_events(events, headers, allowed_fields, max_batch_size)
+
+
+    
+    def _enrich_single_event(self, event, event_dest_ip, headers, allowed_fields):
+        params = (
+            ("ipAddress", event_dest_ip),
+            ("verbose", ""),
+        )
+        response = req.get(
+            f"https://cti.api.crowdsec.net/v2/smoke/{event_dest_ip}",
+            headers=headers,
+            params=params,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            event = attach_resp_to_event(event, data, self.ipfield, allowed_fields)
+        elif response.status_code == 429:
+            event[f"crowdsec_{self.ipfield}_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+        elif response.status_code == 404:
+            event[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+            event[f"crowdsec_{self.ipfield}_confidence"] = "none"
+        else:
+            event[f"crowdsec_{self.ipfield}_error"] = f"Error {response.status_code} : {response.text}"
+        return event
+
+    def _process_events(self, events, headers, allowed_fields, batch_size):
+        buffer = []
+        for event in events:
+            event_dest_ip = event.get(self.ipfield)
+            if not event_dest_ip:
+                event[f"crowdsec_{self.ipfield}_error"] = f"Field {self.ipfield} not found on event"
+                yield event
+                continue
+            buffer.append((event, event_dest_ip))
+            if len(buffer) >= batch_size:
+                yield from self._execute_batch(buffer, headers, allowed_fields)
+                buffer = []
+
+        if buffer:
+            yield from self._execute_batch(buffer, headers, allowed_fields)
+
+    def _execute_batch(self, buffer, headers, allowed_fields):
+        if len(buffer) == 1:
+            event, ip = buffer[0]
+            yield self._enrich_single_event(event, ip, headers, allowed_fields)
+            return
+
+        ips = [ip for _, ip in buffer]
+        params = {"ips": ",".join(ips)}
+        response = req.get(
+            "https://cti.api.crowdsec.net/v2/smoke",
+            headers=headers,
+            params=params,
+        )
+
+        if response.status_code == 200:
+            payload = self._normalize_batch_response(response.json())
+            for event, ip in buffer:
+                for entry in payload:
+                    if entry.get("ip") == ip:
+                        attach_resp_to_event(event, entry, self.ipfield, allowed_fields)
+                        yield event
+                        break
+                else:
+                    event[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+                    event[f"crowdsec_{self.ipfield}_confidence"] = "none"
+                    yield event
+        elif response.status_code == 429:
+            error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+            for event, _ in buffer:
+                event[f"crowdsec_{self.ipfield}_error"] = error_msg
+                yield event
+        else:
+            error_msg = f"Error {response.status_code} : {response.text}"
+            for event, _ in buffer:
+                event[f"crowdsec_{self.ipfield}_error"] = error_msg
+                yield event
+
+    def _normalize_batch_response(self, data):
+        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+            return data["items"]
+
+    def _load_batching_settings(self):
+        batching = False
+        batch_size = DEFAULT_BATCH_SIZE
+        try:
+            for conf in self.service.confs.list():
+                if conf.name == "crowdsec_settings":
+                    stanza = conf.list()[0] #TODO : clean this up
+                    if stanza:
+                        batching = stanza.content.get("batching", "0").lower() == "1"
+                        raw_size = stanza.content.get("batch_size", DEFAULT_BATCH_SIZE)
+                        try:
+                            parsed_size = int(raw_size)
+                            if parsed_size in ALLOWED_BATCH_SIZES:
+                                batch_size = parsed_size
+                        except (TypeError, ValueError):
+                            self.logger.debug("Invalid batch_size '%s' in config, using default", raw_size)
+        except Exception as exc:
+            self.logger.debug("Unable to load batching settings: %s", exc)
+        return batching, batch_size
 
 
 dispatch(CsSmokeCommand, sys.argv, sys.stdin, sys.stdout, __name__)

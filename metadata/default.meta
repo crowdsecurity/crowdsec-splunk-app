@@ -1,3 +1,6 @@
 []
 access = read : [ * ], write : [ admin ]
 export = system
+[passwords/credential%3Acrowdsec-splunk-app_realm%3Aapi_key%3A]
+access = read : [ * ], write : [ admin ]
+export = system
