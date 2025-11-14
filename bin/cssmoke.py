@@ -189,10 +189,7 @@ class CsSmokeCommand(StreamingCommand):
             return
 
         ips = [ip for _, ip in buffer]
-        params = (
-            ("ips", ",".join(ips)),
-            ("verbose", ""),
-        )
+        params = {"ips": ",".join(ips)}
         log(f"Processing batch  lookup for {len(ips)} IPs")
         response = req.get(
             "https://cti.api.crowdsec.net/v2/smoke",
@@ -203,12 +200,14 @@ class CsSmokeCommand(StreamingCommand):
         if response.status_code == 200:
             payload = self._normalize_batch_response(response.json())
             for event, ip in buffer:
-                data = payload.get(ip)
-                if data:
-                    attach_resp_to_event(event, data, self.ipfield, allowed_fields)
+                for entry in payload:
+                    if entry.get("ip") == ip:
+                        attach_resp_to_event(event, entry, self.ipfield, allowed_fields)
+                        yield event
+                        break
                 else:
                     event[f"crowdsec_{self.ipfield}_error"] = f"No CrowdSec data returned for {ip}"
-                yield event
+                    yield event
         elif response.status_code == 429:
             error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
             for event, _ in buffer:
@@ -221,36 +220,38 @@ class CsSmokeCommand(StreamingCommand):
                 yield event
 
     def _normalize_batch_response(self, data):
-        if isinstance(data, list):
-            normalized = {}
-            for entry in data:
-                ip = entry.get("ip")
-                if ip:
-                    normalized[ip] = entry
-            return normalized
-        if isinstance(data, dict):
-            if "ips" in data and isinstance(data["ips"], dict):
-                return data["ips"]
-            return {key: value for key, value in data.items() if isinstance(value, dict) and key.count(".") == 3}
-        return {}
+        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+            return data["items"]
+        # if isinstance(data, list):
+        #     normalized = {}
+        #     for entry in data:
+        #         ip = entry.get("ip")
+        #         if ip:
+        #             normalized[ip] = entry
+        #     return normalized
+        # if isinstance(data, dict):
+        #     if "ips" in data and isinstance(data["ips"], dict):
+        #         return data["ips"]
+        #     return {key: value for key, value in data.items() if isinstance(value, dict) and key.count(".") == 3}
+        # return {}
 
     def _load_batching_settings(self):
         batching = False
         batch_size = DEFAULT_BATCH_SIZE
         try:
-            conf = self.service.confs.get("crowdsec_settings")
-            log(f"Loading settings {conf}")
-            if conf:
-                stanza = conf.get("settings")
-                if stanza:
-                    batching = stanza.content.get("batching", "false").lower() == "true"
-                    raw_size = stanza.content.get("batch_size", DEFAULT_BATCH_SIZE)
-                    try:
-                        parsed_size = int(raw_size)
-                        if parsed_size in ALLOWED_BATCH_SIZES:
-                            batch_size = parsed_size
-                    except (TypeError, ValueError):
-                        self.logger.debug("Invalid batch_size '%s' in config, using default", raw_size)
+            for conf in self.service.confs.list():
+                #log(f"Available config: {conf.name}")
+                if conf.name == "crowdsec_settings":
+                    stanza = conf.list()[0] #TODO : clean this up
+                    if stanza:
+                        batching = stanza.content.get("batching", "0").lower() == "1"
+                        raw_size = stanza.content.get("batch_size", DEFAULT_BATCH_SIZE)
+                        try:
+                            parsed_size = int(raw_size)
+                            if parsed_size in ALLOWED_BATCH_SIZES:
+                                batch_size = parsed_size
+                        except (TypeError, ValueError):
+                            self.logger.debug("Invalid batch_size '%s' in config, using default", raw_size)
         except Exception as exc:
             self.logger.debug("Unable to load batching settings: %s", exc)
             log("Unable to load batching settings:", exc)

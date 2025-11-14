@@ -163,9 +163,9 @@ async function readExistingSettings(service) {
 
         await promisify(stanza.fetch)();
         const props = stanza.properties();
-
+        console.log("Existing CrowdSec settings:", props);
         return {
-            batching: props.batching ? props.batching === "true" : defaults.batching,
+            batching: props.batching ? props.batching === "1" : defaults.batching,
             batch_size: props.batch_size ? (parseInt(props.batch_size, 10) || defaults.batch_size) : defaults.batch_size,
         };
     } catch (error) {
