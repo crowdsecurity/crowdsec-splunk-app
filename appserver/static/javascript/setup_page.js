@@ -9,7 +9,7 @@ require.config({
         ReactDOM: "../app/" + app_name + "/javascript/vendor/react-dom.production.min",
     },
     scriptType: "module",
-    urlArgs: "v=v1.2.1"
+    urlArgs: "v=v1.2.2"
 });
 
 require([
