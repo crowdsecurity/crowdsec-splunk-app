@@ -1,3 +1,5 @@
+volumes:
+    splunk-siem-data:
 services:
     splunk-siem:
         container_name: splunk-siem-crowdsec
@@ -7,4 +9,5 @@ services:
         env_file:
             - .env
         volumes:
+            - splunk-siem-data:/opt/splunk
             - ../:/opt/splunk/etc/apps/crowdsec-splunk-app:rw
