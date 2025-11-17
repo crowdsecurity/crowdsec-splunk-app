@@ -13,6 +13,22 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ---
 
+## [1.2.2](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.2) - 2025-11-17
+
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.1...v1.2.2)
+
+### Changed
+
+- Improve retrieval/display of existing settings
+- Always use the name of the field(s) in the output variable name, allowing enrichment of events containing multiple IPs
+
+### Added
+
+- Add a `fields` argument allowing to select relevant fields (i.e. `ipfield="ip" fields="reputation,confidence"`)
+- Support batching to API
+
+---
+
 ## [1.2.1](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.1) - 2025-06-27
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.0...v1.2.1)
