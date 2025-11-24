@@ -83,7 +83,7 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
 
     return record
 
-@Configuration()
+@Configuration(distributed=False)
 class CsSmokeCommand(StreamingCommand):
 
     """%(synopsis)
