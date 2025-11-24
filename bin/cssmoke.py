@@ -4,7 +4,6 @@ import sys
 import os
 import requests as req
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
-from bin.splunklib import data
 from splunklib.searchcommands import (
     dispatch,
     StreamingCommand,
