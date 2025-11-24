@@ -4,6 +4,7 @@ import sys
 import os
 import requests as req
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
+from bin.splunklib import data
 from splunklib.searchcommands import (
     dispatch,
     StreamingCommand,
@@ -82,7 +83,6 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
 
     return record
 
-
 @Configuration()
 class CsSmokeCommand(StreamingCommand):
 
@@ -139,7 +139,66 @@ class CsSmokeCommand(StreamingCommand):
         max_batch_size = batch_size if batching_enabled else 1
         yield from self._process_records(records, headers, allowed_fields, max_batch_size)
 
+    def _add_default_fields_to_record(self, record, allowed_fields):
+        allowed = set(allowed_fields) if allowed_fields else None
+        prefix = f"crowdsec_{self.ipfield}_"
 
+        default_fields = {
+            f"{prefix}reputation": "",
+            f"{prefix}confidence": "",
+            f"{prefix}ip_range_score": "",
+            f"{prefix}ip": "",
+            f"{prefix}ip_range": "",
+            f"{prefix}ip_range_24": "",
+            f"{prefix}ip_range_24_reputation": "",
+            f"{prefix}ip_range_24_score": "",
+            f"{prefix}as_name": "",
+            f"{prefix}as_num": "",
+            f"{prefix}country": "",
+            f"{prefix}city": "",
+            f"{prefix}latitude": "",
+            f"{prefix}longitude": "",
+            f"{prefix}reverse_dns": "",
+            f"{prefix}behaviors": "",
+            f"{prefix}mitre_techniques": "",
+            f"{prefix}cves": "",
+            f"{prefix}first_seen": "",
+            f"{prefix}last_seen": "",
+            f"{prefix}full_age": "",
+            f"{prefix}days_age": "",
+            f"{prefix}false_positives": "",
+            f"{prefix}classifications": "",
+            f"{prefix}attack_details": "",
+            f"{prefix}target_countries": "",
+            f"{prefix}background_noise": "",
+            f"{prefix}background_noise_score": "",
+            f"{prefix}overall_aggressiveness": "",
+            f"{prefix}overall_threat": "",
+            f"{prefix}overall_trust": "",
+            f"{prefix}overall_anomaly": "",
+            f"{prefix}overall_total": "",
+            f"{prefix}last_day_aggressiveness": "",
+            f"{prefix}last_day_threat": "",
+            f"{prefix}last_day_trust": "",
+            f"{prefix}last_day_anomaly": "",
+            f"{prefix}last_day_total": "",
+            f"{prefix}last_week_aggressiveness": "",
+            f"{prefix}last_week_threat": "",
+            f"{prefix}last_week_trust": "",
+            f"{prefix}last_week_anomaly": "",
+            f"{prefix}last_week_total": "",
+            f"{prefix}last_month_aggressiveness": "",
+            f"{prefix}last_month_threat": "",
+            f"{prefix}last_month_trust": "",
+            f"{prefix}last_month_anomaly": "",
+            f"{prefix}last_month_total": "",
+            f"{prefix}references": "",
+        }
+
+        for field, value in default_fields.items():
+            short_field = field[len(prefix):]
+            if allowed is None or short_field in allowed:
+                record[field] = value
     
     def _enrich_single_record(self, record, record_dest_ip, headers, allowed_fields):
         params = (
@@ -165,7 +224,11 @@ class CsSmokeCommand(StreamingCommand):
 
     def _process_records(self, records, headers, allowed_fields, batch_size):
         buffer = []
+        first_record = True
         for record in records:
+            if first_record:
+                self._add_default_fields_to_record(record, allowed_fields)
+                first_record = False
             record_dest_ip = record.get(self.ipfield)
             if not record_dest_ip:
                 record[f"crowdsec_{self.ipfield}_error"] = f"Field {self.ipfield} not found in record"
