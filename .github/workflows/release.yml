@@ -19,7 +19,6 @@ on:
 
 jobs:
   create-release:
-
     name: Create release
     runs-on: ubuntu-latest
     permissions:
@@ -97,7 +96,7 @@ jobs:
           fi
           # Check in appserver/static/javascript/setup_page.js
           # Example: v=v1.0.6
-          JS_VERSION=$(sed -n 's/urlArgs\: "v=v\(.*\)"/\1/p' appserver/static/javascript/setup_page.js | sed 's/ //g' | tr -d '\r')
+          JS_VERSION=$(sed -n 's/urlArgs\: "v=v\(.*\)",\{0,1\}/\1/p' appserver/static/javascript/setup_page.js | sed 's/ //g' | tr -d '\r')
           if [[ $JS_VERSION == "${{ env.VERSION_NUMBER }}" ]]
           then
               echo "appserver/static/javascript/setup_page.js VERSION OK"
@@ -110,7 +109,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9.16'
+          python-version: "3.9.16"
 
       - name: Install splunk toolkit
         run: |
@@ -148,7 +147,6 @@ jobs:
           body_path: CHANGELOG.txt
           name: ${{ env.VERSION_NUMBER }}
           tag_name: ${{ github.event.inputs.tag_name }}
-    
 
       - name: Upload to SplunkBase
         if: github.event.inputs.publish-to-splunkbase == 'true'
