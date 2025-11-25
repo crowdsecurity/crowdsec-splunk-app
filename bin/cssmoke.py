@@ -19,7 +19,7 @@ def log(msg, *args):
     sys.stderr.write(msg + " ".join([str(a) for a in args]) + "\n")
 
 
-def attach_resp_to_event(event, data, ipfield, allowed_fields=None):
+def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
     allowed = set(allowed_fields) if allowed_fields else None
 
     prefix = f"crowdsec_{ipfield}_"
@@ -78,12 +78,11 @@ def attach_resp_to_event(event, data, ipfield, allowed_fields=None):
     for field, value in mapped_fields.items():
         short_field = field[len(prefix):]
         if allowed is None or short_field in allowed:
-            event[field] = value
+            record[field] = value
 
-    return event
+    return record
 
-
-@Configuration()
+@Configuration(distributed=False)
 class CsSmokeCommand(StreamingCommand):
 
     """%(synopsis)
@@ -112,7 +111,7 @@ class CsSmokeCommand(StreamingCommand):
         require=False,
     )
 
-    def stream(self, events):
+    def stream(self, records):
         api_key = ""
         for passw in self.service.storage_passwords.list():
             if passw.name == "crowdsec-splunk-app_realm:api_key:":
@@ -137,41 +136,104 @@ class CsSmokeCommand(StreamingCommand):
         batching_enabled, batch_size = self._load_batching_settings()
 
         max_batch_size = batch_size if batching_enabled else 1
-        yield from self._process_events(events, headers, allowed_fields, max_batch_size)
+        yield from self._process_records(records, headers, allowed_fields, max_batch_size)
 
+    def _add_default_fields_to_record(self, record, allowed_fields):
+        allowed = set(allowed_fields) if allowed_fields else None
+        prefix = f"crowdsec_{self.ipfield}_"
 
+        default_fields = {
+            f"{prefix}reputation": "",
+            f"{prefix}confidence": "",
+            f"{prefix}ip_range_score": "",
+            f"{prefix}ip": "",
+            f"{prefix}ip_range": "",
+            f"{prefix}ip_range_24": "",
+            f"{prefix}ip_range_24_reputation": "",
+            f"{prefix}ip_range_24_score": "",
+            f"{prefix}as_name": "",
+            f"{prefix}as_num": "",
+            f"{prefix}country": "",
+            f"{prefix}city": "",
+            f"{prefix}latitude": "",
+            f"{prefix}longitude": "",
+            f"{prefix}reverse_dns": "",
+            f"{prefix}behaviors": "",
+            f"{prefix}mitre_techniques": "",
+            f"{prefix}cves": "",
+            f"{prefix}first_seen": "",
+            f"{prefix}last_seen": "",
+            f"{prefix}full_age": "",
+            f"{prefix}days_age": "",
+            f"{prefix}false_positives": "",
+            f"{prefix}classifications": "",
+            f"{prefix}attack_details": "",
+            f"{prefix}target_countries": "",
+            f"{prefix}background_noise": "",
+            f"{prefix}background_noise_score": "",
+            f"{prefix}overall_aggressiveness": "",
+            f"{prefix}overall_threat": "",
+            f"{prefix}overall_trust": "",
+            f"{prefix}overall_anomaly": "",
+            f"{prefix}overall_total": "",
+            f"{prefix}last_day_aggressiveness": "",
+            f"{prefix}last_day_threat": "",
+            f"{prefix}last_day_trust": "",
+            f"{prefix}last_day_anomaly": "",
+            f"{prefix}last_day_total": "",
+            f"{prefix}last_week_aggressiveness": "",
+            f"{prefix}last_week_threat": "",
+            f"{prefix}last_week_trust": "",
+            f"{prefix}last_week_anomaly": "",
+            f"{prefix}last_week_total": "",
+            f"{prefix}last_month_aggressiveness": "",
+            f"{prefix}last_month_threat": "",
+            f"{prefix}last_month_trust": "",
+            f"{prefix}last_month_anomaly": "",
+            f"{prefix}last_month_total": "",
+            f"{prefix}references": "",
+        }
+
+        for field, value in default_fields.items():
+            short_field = field[len(prefix):]
+            if allowed is None or short_field in allowed:
+                record[field] = value
     
-    def _enrich_single_event(self, event, event_dest_ip, headers, allowed_fields):
+    def _enrich_single_record(self, record, record_dest_ip, headers, allowed_fields):
         params = (
-            ("ipAddress", event_dest_ip),
+            ("ipAddress", record_dest_ip),
             ("verbose", ""),
         )
         response = req.get(
-            f"https://cti.api.crowdsec.net/v2/smoke/{event_dest_ip}",
+            f"https://cti.api.crowdsec.net/v2/smoke/{record_dest_ip}",
             headers=headers,
             params=params,
         )
         if response.status_code == 200:
             data = response.json()
-            event = attach_resp_to_event(event, data, self.ipfield, allowed_fields)
+            record = attach_resp_to_record(record, data, self.ipfield, allowed_fields)
         elif response.status_code == 429:
-            event[f"crowdsec_{self.ipfield}_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+            record[f"crowdsec_{self.ipfield}_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
         elif response.status_code == 404:
-            event[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
-            event[f"crowdsec_{self.ipfield}_confidence"] = "none"
+            record[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+            record[f"crowdsec_{self.ipfield}_confidence"] = "none"
         else:
-            event[f"crowdsec_{self.ipfield}_error"] = f"Error {response.status_code} : {response.text}"
-        return event
+            record[f"crowdsec_{self.ipfield}_error"] = f"Error {response.status_code} : {response.text}"
+        return record
 
-    def _process_events(self, events, headers, allowed_fields, batch_size):
+    def _process_records(self, records, headers, allowed_fields, batch_size):
         buffer = []
-        for event in events:
-            event_dest_ip = event.get(self.ipfield)
-            if not event_dest_ip:
-                event[f"crowdsec_{self.ipfield}_error"] = f"Field {self.ipfield} not found on event"
-                yield event
+        first_record = True
+        for record in records:
+            if first_record:
+                self._add_default_fields_to_record(record, allowed_fields)
+                first_record = False
+            record_dest_ip = record.get(self.ipfield)
+            if not record_dest_ip:
+                record[f"crowdsec_{self.ipfield}_error"] = f"Field {self.ipfield} not found in record"
+                yield record
                 continue
-            buffer.append((event, event_dest_ip))
+            buffer.append((record, record_dest_ip))
             if len(buffer) >= batch_size:
                 yield from self._execute_batch(buffer, headers, allowed_fields)
                 buffer = []
@@ -181,8 +243,8 @@ class CsSmokeCommand(StreamingCommand):
 
     def _execute_batch(self, buffer, headers, allowed_fields):
         if len(buffer) == 1:
-            event, ip = buffer[0]
-            yield self._enrich_single_event(event, ip, headers, allowed_fields)
+            record, ip = buffer[0]
+            yield self._enrich_single_record(record, ip, headers, allowed_fields)
             return
 
         ips = [ip for _, ip in buffer]
@@ -195,26 +257,26 @@ class CsSmokeCommand(StreamingCommand):
 
         if response.status_code == 200:
             payload = self._normalize_batch_response(response.json())
-            for event, ip in buffer:
+            for record, ip in buffer:
                 for entry in payload:
                     if entry.get("ip") == ip:
-                        attach_resp_to_event(event, entry, self.ipfield, allowed_fields)
-                        yield event
+                        attach_resp_to_record(record, entry, self.ipfield, allowed_fields)
+                        yield record
                         break
                 else:
-                    event[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
-                    event[f"crowdsec_{self.ipfield}_confidence"] = "none"
-                    yield event
+                    record[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+                    record[f"crowdsec_{self.ipfield}_confidence"] = "none"
+                    yield record
         elif response.status_code == 429:
             error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
-            for event, _ in buffer:
-                event[f"crowdsec_{self.ipfield}_error"] = error_msg
-                yield event
+            for record, _ in buffer:
+                record[f"crowdsec_{self.ipfield}_error"] = error_msg
+                yield record
         else:
             error_msg = f"Error {response.status_code} : {response.text}"
-            for event, _ in buffer:
-                event[f"crowdsec_{self.ipfield}_error"] = error_msg
-                yield event
+            for record, _ in buffer:
+                record[f"crowdsec_{self.ipfield}_error"] = error_msg
+                yield record
 
     def _normalize_batch_response(self, data):
         if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
