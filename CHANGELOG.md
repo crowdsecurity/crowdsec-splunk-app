@@ -10,8 +10,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The [public API](https://semver.org/spec/v2.0.0.html#spec-item-1) of this library consists of all code related to the
 Splunk app: i.e., all files and folders except ones that are ignored by the `.slimignore` file.
 
-
 ---
+
+## [1.2.3](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.3) - 2025-11-25
+
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.2...v1.2.3)
+
+### Changed
+
+- Fix fields not being present in the records if the first match was an unknown IP or without an IP field
+- Force app to run on the search head.
 
 ## [1.2.2](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.2) - 2025-11-17
 
@@ -33,7 +41,6 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.0...v1.2.1)
 
-
 ### Fixed
 
 - Make API key editable in the UI
@@ -50,7 +57,7 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ### Fixed
 
-- Fix typo for `aggressiveness` fields 
+- Fix typo for `aggressiveness` fields
 
 ---
 
