@@ -124,7 +124,7 @@ class CsSmokeCommand(StreamingCommand):
         headers = {
             "x-api-key": api_key,
             "Accept": "application/json",
-            "User-Agent": "crowdSec-splunk-app/v1.0.0",
+            "User-Agent": "crowdSec-splunk-app/v1.2.3",
         }
 
         allowed_fields = None
