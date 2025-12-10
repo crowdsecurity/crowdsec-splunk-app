@@ -302,6 +302,9 @@ class CsSmokeCommand(StreamingCommand):
         headers = self.get_headers()
         if local_dump_enabled:
             self.load_readers()
+            if len(self.readers) == 0:
+                logger.error("No MMDB readers loaded, skipping local lookup")
+                return
             for _, ip in buffer:
                 for reader in self.readers:
                     try:
