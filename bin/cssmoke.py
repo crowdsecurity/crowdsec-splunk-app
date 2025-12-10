@@ -3,6 +3,9 @@
 import sys
 import os
 import requests as req
+import maxminddb
+import logging
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from splunklib.searchcommands import (
     dispatch,
@@ -12,8 +15,15 @@ from splunklib.searchcommands import (
     validators,
 )
 
+from download_mmdb import get_mmdb_path, download_mmdb
+from local_dump_constants import MMDB_ENTRIES
+
 DEFAULT_BATCH_SIZE = 10
 ALLOWED_BATCH_SIZES = {10, 20, 50, 100}
+
+logger = logging.getLogger("cssmoke")
+logger.setLevel(logging.DEBUG)
+
 
 def log(msg, *args):
     sys.stderr.write(msg + " ".join([str(a) for a in args]) + "\n")
@@ -57,17 +67,23 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
         f"{prefix}overall_trust": data["scores"]["overall"]["trust"],
         f"{prefix}overall_anomaly": data["scores"]["overall"]["anomaly"],
         f"{prefix}overall_total": data["scores"]["overall"]["total"],
-        f"{prefix}last_day_aggressiveness": data["scores"]["last_day"]["aggressiveness"],
+        f"{prefix}last_day_aggressiveness": data["scores"]["last_day"][
+            "aggressiveness"
+        ],
         f"{prefix}last_day_threat": data["scores"]["last_day"]["threat"],
         f"{prefix}last_day_trust": data["scores"]["last_day"]["trust"],
         f"{prefix}last_day_anomaly": data["scores"]["last_day"]["anomaly"],
         f"{prefix}last_day_total": data["scores"]["last_day"]["total"],
-        f"{prefix}last_week_aggressiveness": data["scores"]["last_week"]["aggressiveness"],
+        f"{prefix}last_week_aggressiveness": data["scores"]["last_week"][
+            "aggressiveness"
+        ],
         f"{prefix}last_week_threat": data["scores"]["last_week"]["threat"],
         f"{prefix}last_week_trust": data["scores"]["last_week"]["trust"],
         f"{prefix}last_week_anomaly": data["scores"]["last_week"]["anomaly"],
         f"{prefix}last_week_total": data["scores"]["last_week"]["total"],
-        f"{prefix}last_month_aggressiveness": data["scores"]["last_month"]["aggressiveness"],
+        f"{prefix}last_month_aggressiveness": data["scores"]["last_month"][
+            "aggressiveness"
+        ],
         f"{prefix}last_month_threat": data["scores"]["last_month"]["threat"],
         f"{prefix}last_month_trust": data["scores"]["last_month"]["trust"],
         f"{prefix}last_month_anomaly": data["scores"]["last_month"]["anomaly"],
@@ -76,15 +92,15 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
     }
 
     for field, value in mapped_fields.items():
-        short_field = field[len(prefix):]
+        short_field = field[len(prefix) :]
         if allowed is None or short_field in allowed:
             record[field] = value
 
     return record
 
+
 @Configuration(distributed=False)
 class CsSmokeCommand(StreamingCommand):
-
     """%(synopsis)
 
     ##Syntax
@@ -112,31 +128,45 @@ class CsSmokeCommand(StreamingCommand):
     )
 
     def stream(self, records):
-        api_key = ""
-        for passw in self.service.storage_passwords.list():
-            if passw.name == "crowdsec-splunk-app_realm:api_key:":
-                api_key = passw.clear_password
-                break
-        if not api_key:
-            raise Exception("No API Key found, please configure the app with CrowdSec CTI API Key")
-
-        # API required headers
-        headers = {
-            "x-api-key": api_key,
-            "Accept": "application/json",
-            "User-Agent": "crowdSec-splunk-app/v1.2.3",
-        }
+        self.api_key = self.load_api_key()
+        if not self.api_key:
+            raise Exception(
+                "No API Key found, please configure the app with CrowdSec CTI API Key"
+            )
 
         allowed_fields = None
         if self.fields:
-            allowed_fields = [field.strip() for field in self.fields.split(",") if field.strip()]
+            allowed_fields = [
+                field.strip() for field in self.fields.split(",") if field.strip()
+            ]
             if not allowed_fields:
                 allowed_fields = None
 
         batching_enabled, batch_size = self._load_batching_settings()
-
+        local_dump_enabled = self._load_local_dump_settings()
         max_batch_size = batch_size if batching_enabled else 1
-        yield from self._process_records(records, headers, allowed_fields, max_batch_size)
+
+        yield from self._process_records(
+            records, allowed_fields, max_batch_size, local_dump_enabled
+        )
+
+    def get_headers(self):
+        """Get headers for API requests"""
+        headers = {
+            "x-api-key": self.api_key,
+            "Accept": "application/json",
+            "User-Agent": "crowdSec-splunk-app/v1.2.3",
+        }
+        return headers
+
+    def load_api_key(self):
+        """Load API key from storage passwords"""
+        api_key = None
+        for passw in self.service.storage_passwords.list():
+            if passw.name == "crowdsec-splunk-app_realm:api_key:":
+                api_key = passw.clear_password
+                break
+        return api_key
 
     def _add_default_fields_to_record(self, record, allowed_fields):
         allowed = set(allowed_fields) if allowed_fields else None
@@ -195,10 +225,10 @@ class CsSmokeCommand(StreamingCommand):
         }
 
         for field, value in default_fields.items():
-            short_field = field[len(prefix):]
+            short_field = field[len(prefix) :]
             if allowed is None or short_field in allowed:
                 record[field] = value
-    
+
     def _enrich_single_record(self, record, record_dest_ip, headers, allowed_fields):
         params = (
             ("ipAddress", record_dest_ip),
@@ -213,15 +243,19 @@ class CsSmokeCommand(StreamingCommand):
             data = response.json()
             record = attach_resp_to_record(record, data, self.ipfield, allowed_fields)
         elif response.status_code == 429:
-            record[f"crowdsec_{self.ipfield}_error"] = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+            record[f"crowdsec_{self.ipfield}_error"] = (
+                '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+            )
         elif response.status_code == 404:
             record[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
             record[f"crowdsec_{self.ipfield}_confidence"] = "none"
         else:
-            record[f"crowdsec_{self.ipfield}_error"] = f"Error {response.status_code} : {response.text}"
+            record[f"crowdsec_{self.ipfield}_error"] = (
+                f"Error {response.status_code} : {response.text}"
+            )
         return record
 
-    def _process_records(self, records, headers, allowed_fields, batch_size):
+    def _process_records(self, records, allowed_fields, batch_size, local_dump_enabled):
         buffer = []
         first_record = True
         for record in records:
@@ -230,18 +264,54 @@ class CsSmokeCommand(StreamingCommand):
                 first_record = False
             record_dest_ip = record.get(self.ipfield)
             if not record_dest_ip:
-                record[f"crowdsec_{self.ipfield}_error"] = f"Field {self.ipfield} not found in record"
+                record[f"crowdsec_{self.ipfield}_error"] = (
+                    f"Field {self.ipfield} not found in record"
+                )
                 yield record
                 continue
             buffer.append((record, record_dest_ip))
             if len(buffer) >= batch_size:
-                yield from self._execute_batch(buffer, headers, allowed_fields)
+                yield from self._execute_batch(
+                    buffer, allowed_fields, local_dump_enabled
+                )
                 buffer = []
 
         if buffer:
-            yield from self._execute_batch(buffer, headers, allowed_fields)
+            yield from self._execute_batch(buffer, allowed_fields, local_dump_enabled)
 
-    def _execute_batch(self, buffer, headers, allowed_fields):
+    def load_mmdb(self, mmdb_path):
+        """Load MMDB file if it exists and is enabled"""
+        try:
+            logger.debug(f"Loading MMDB from path: {mmdb_path}")
+            reader = maxminddb.open_database(mmdb_path)
+            logger.debug("MMDB loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading MMDB: {e}")
+            reader = None
+        return reader
+
+    def load_readers(self):
+        self.readers = []
+        for entry, info in MMDB_ENTRIES.items():
+            mmdb_path, exist = get_mmdb_path(info["filename"])
+            if not exist:
+                download_mmdb(info["url"], mmdb_path, self.api_key)
+            self.readers.append(self.load_mmdb(mmdb_path))
+
+    def _execute_batch(self, buffer, allowed_fields, local_dump_enabled):
+        headers = self.get_headers()
+        if local_dump_enabled:
+            self.load_readers()
+            for _, ip in buffer:
+                for reader in self.readers:
+                    try:
+                        result = reader.get(ip)
+                        if result:
+                            logger.info(f"IP {ip} found in local MMDB")
+                            logger.info(f"Result: {result}")
+                    except Exception as e:
+                        logger.warning(f"MMDB lookup failed for {ip}: {e}")
+
         if len(buffer) == 1:
             record, ip = buffer[0]
             yield self._enrich_single_record(record, ip, headers, allowed_fields)
@@ -260,7 +330,9 @@ class CsSmokeCommand(StreamingCommand):
             for record, ip in buffer:
                 for entry in payload:
                     if entry.get("ip") == ip:
-                        attach_resp_to_record(record, entry, self.ipfield, allowed_fields)
+                        attach_resp_to_record(
+                            record, entry, self.ipfield, allowed_fields
+                        )
                         yield record
                         break
                 else:
@@ -279,8 +351,26 @@ class CsSmokeCommand(StreamingCommand):
                 yield record
 
     def _normalize_batch_response(self, data):
-        if isinstance(data, dict) and "items" in data and isinstance(data["items"], list):
+        if (
+            isinstance(data, dict)
+            and "items" in data
+            and isinstance(data["items"], list)
+        ):
             return data["items"]
+
+    def _load_local_dump_settings(self):
+        local_dump_enabled = False
+        try:
+            for conf in self.service.confs.list():
+                if conf.name == "crowdsec_settings":
+                    stanza = conf.list()[0]
+                    if stanza:
+                        local_dump_enabled = (
+                            stanza.content.get("local_dump", "0").lower() == "1"
+                        )
+        except Exception as exc:
+            self.logger.debug("Unable to load 'local_dump' settings: %s", exc)
+        return local_dump_enabled
 
     def _load_batching_settings(self):
         batching = False
@@ -288,7 +378,7 @@ class CsSmokeCommand(StreamingCommand):
         try:
             for conf in self.service.confs.list():
                 if conf.name == "crowdsec_settings":
-                    stanza = conf.list()[0] #TODO : clean this up
+                    stanza = conf.list()[0]  # TODO : clean this up
                     if stanza:
                         batching = stanza.content.get("batching", "0").lower() == "1"
                         raw_size = stanza.content.get("batch_size", DEFAULT_BATCH_SIZE)
@@ -297,7 +387,10 @@ class CsSmokeCommand(StreamingCommand):
                             if parsed_size in ALLOWED_BATCH_SIZES:
                                 batch_size = parsed_size
                         except (TypeError, ValueError):
-                            self.logger.debug("Invalid batch_size '%s' in config, using default", raw_size)
+                            self.logger.debug(
+                                "Invalid batch_size '%s' in config, using default",
+                                raw_size,
+                            )
         except Exception as exc:
             self.logger.debug("Unable to load batching settings: %s", exc)
         return batching, batch_size
