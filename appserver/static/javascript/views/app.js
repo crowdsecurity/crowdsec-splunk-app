@@ -15,6 +15,7 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
 
       this.handleChange = this.handleChange.bind(this);
       this.handleSubmit = this.handleSubmit.bind(this);
+      this.handleConfigImport = this.handleConfigImport.bind(this);
     }
 
     async componentDidMount() {
@@ -35,7 +36,75 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
       const { name, type, checked, value } = event.target;
       const normalizedValue = name === "batch_size" ? parseInt(value, 10) || 10 : value;
 
-      this.setState({ ...this.state, [name]: type === "checkbox" ? checked : normalizedValue })
+      this.setState(prevState => {
+        const nextState = { ...prevState };
+
+        if (name === "local_dump") {
+          const enabled = type === "checkbox" ? checked : !!normalizedValue;
+          nextState.local_dump = enabled;
+          if (enabled) {
+            // Disable batching if full local dump is enabled
+            nextState.batching = false;
+          }
+        } else if (name === "batching") {
+          const enabled = type === "checkbox" ? checked : !!normalizedValue;
+          nextState.batching = enabled;
+          if (enabled) {
+            // Disable local dump if batching is enabled
+            nextState.local_dump = false;
+          }
+        } else if (name === "batch_size") {
+          nextState.batch_size = normalizedValue;
+        } else {
+          nextState[name] = type === "checkbox" ? checked : normalizedValue;
+        }
+
+        return nextState;
+      });
+    }
+
+    async handleConfigImport(event) {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        const config = JSON.parse(text);
+
+        // Start from current state
+        const current = this.state;
+
+        // Read raw values from config (or keep current if not provided)
+        const importedLocalDump =
+          typeof config.local_dump === "boolean" ? config.local_dump : current.local_dump;
+        const importedBatching =
+          typeof config.batching === "boolean" ? config.batching : current.batching;
+        const importedBatchSize =
+          typeof config.batch_size === "number" ? config.batch_size : current.batch_size;
+
+        // Enforce mutual exclusion:
+        // - If local_dump is true, force batching off.
+        // - If batching is true and local_dump is false, keep as is.
+        let finalLocalDump = importedLocalDump;
+        let finalBatching = importedBatching;
+
+        if (finalLocalDump && finalBatching) {
+          // Decide which one wins; here we prefer local_dump and disable batching
+          finalBatching = false;
+        }
+
+        this.setState({
+          password: config.api_key ?? current.password,
+          batching: finalBatching,
+          batch_size: importedBatchSize,
+          local_dump: finalLocalDump,
+        });
+      } catch (error) {
+        console.error("Failed to import config file:", error);
+        alert("Invalid config file. Please provide a valid JSON file.");
+      }
     }
 
     async handleSubmit(event) {
@@ -141,11 +210,19 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
       };
 
       return e("div", null, [
-        e("h2", null, "Enter your API key to start using the App!"),
         e("div", null, [
           e("form", { onSubmit: this.handleSubmit, style: formStyle }, [
-
+            e("div", { style: { marginBottom: '20px' } }, [
+              e("span", { style: labelTextStyle }, "Import config:"),
+              e("input", {
+                type: "file",
+                accept: "application/json",
+                onChange: this.handleConfigImport,
+                style: { marginLeft: '12px', display: 'inline-block' }
+              })
+            ]),
             // --- API Key Input ---
+            e("h2", null, "Enter your API key to start using the App!"),
             e("div", { style: apiKeyContainerStyle }, [
               e("label", { style: labelStyle }, [
                 e("span", { style: labelTextStyle }, "API Key:"),
@@ -160,6 +237,21 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
               ])
             ]),
 
+            // Enable full local dump Checkbox
+            e("div", { style: checkboxContainerStyle }, [
+              e("label", { style: checkboxLabelStyle }, [
+                e("input", {
+                  type: "checkbox",
+                  name: "local_dump",
+                  checked: this.state.local_dump,
+                  disabled: this.state.batching,            // cannot enable local dump when batching is on
+                  onChange: this.handleChange,
+                  style: checkboxInputStyle
+                }),
+                e("span", { style: checkboxTextStyle }, "Enable full local dump")
+              ])
+            ]),
+
             // --- Enable batching Checkbox ---
             e("div", { style: checkboxContainerStyle }, [
               e("label", { style: checkboxLabelStyle }, [
@@ -167,6 +259,7 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
                   type: "checkbox",
                   name: "batching",
                   checked: this.state.batching,
+                  disabled: this.state.local_dump,          // cannot enable batching when local_dump is on
                   onChange: this.handleChange,
                   style: checkboxInputStyle
                 }),
@@ -174,19 +267,6 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
               ])
             ]),
 
-            // --- Enable full local dump Checkbox ---
-            e("div", { style: checkboxContainerStyle }, [
-              e("label", { style: checkboxLabelStyle }, [
-                e("input", {
-                  type: "checkbox",
-                  name: "local_dump",
-                  checked: this.state.local_dump,
-                  onChange: this.handleChange,
-                  style: checkboxInputStyle
-                }),
-                e("span", { style: checkboxTextStyle }, "Enable full local dump")
-              ])
-            ]),
 
             // --- Batch size Dropdown ---
             e("div", { style: selectContainerStyle }, [
@@ -196,7 +276,7 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
                   name: "batch_size",
                   value: this.state.batch_size,
                   onChange: this.handleChange,
-                  disabled: !this.state.batching,
+                  disabled: !this.state.batching || this.state.local_dump,  // only when batching on and no local dump
                   style: selectInputStyle
                 }, [
                   e("option", { value: 10 }, "10"),
@@ -206,7 +286,6 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
                 ])
               ])
             ]),
-
             // --- Submit Button ---
             e("div", { style: buttonContainerStyle }, [
               e("input", { type: "submit", value: "Submit", style: submitButtonStyle })
