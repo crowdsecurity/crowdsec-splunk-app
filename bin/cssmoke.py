@@ -2,8 +2,8 @@
 
 import sys
 import os
+import json
 import requests as req
-import maxminddb
 import logging
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
@@ -16,7 +16,13 @@ from splunklib.searchcommands import (
 )
 
 from download_mmdb import get_mmdb_path, download_mmdb
-from local_dump_constants import MMDB_ENTRIES
+from crowdsec_utils import (
+    get_headers,
+    load_mmdb,
+    load_local_dump_settings,
+    load_api_key,
+)
+from crowdsec_constants import LOCAL_DUMP_FILES, CROWDSEC_PROFILES
 
 DEFAULT_BATCH_SIZE = 10
 ALLOWED_BATCH_SIZES = {10, 20, 50, 100}
@@ -33,62 +39,66 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
     allowed = set(allowed_fields) if allowed_fields else None
 
     prefix = f"crowdsec_{ipfield}_"
+
+    location = data.get("location") or {}
+    history = data.get("history") or {}
+    classifications = data.get("classifications") or {}
+    scores = data.get("scores") or {}
+    overall = scores.get("overall") or {}
+    last_day = scores.get("last_day") or {}
+    last_week = scores.get("last_week") or {}
+    last_month = scores.get("last_month") or {}
+
     mapped_fields = {
-        f"{prefix}reputation": data["reputation"],
-        f"{prefix}confidence": data["confidence"],
-        f"{prefix}ip_range_score": data["ip_range_score"],
-        f"{prefix}ip": data["ip"],
-        f"{prefix}ip_range": data["ip_range"],
-        f"{prefix}ip_range_24": data["ip_range_24"],
-        f"{prefix}ip_range_24_reputation": data["ip_range_24_reputation"],
-        f"{prefix}ip_range_24_score": data["ip_range_24_score"],
-        f"{prefix}as_name": data["as_name"],
-        f"{prefix}as_num": data["as_num"],
-        f"{prefix}country": data["location"]["country"],
-        f"{prefix}city": data["location"]["city"],
-        f"{prefix}latitude": data["location"]["latitude"],
-        f"{prefix}longitude": data["location"]["longitude"],
-        f"{prefix}reverse_dns": data["reverse_dns"],
-        f"{prefix}behaviors": data["behaviors"],
-        f"{prefix}mitre_techniques": data["mitre_techniques"],
-        f"{prefix}cves": data["cves"],
-        f"{prefix}first_seen": data["history"]["first_seen"],
-        f"{prefix}last_seen": data["history"]["last_seen"],
-        f"{prefix}full_age": data["history"]["full_age"],
-        f"{prefix}days_age": data["history"]["days_age"],
-        f"{prefix}false_positives": data["classifications"]["false_positives"],
-        f"{prefix}classifications": data["classifications"]["classifications"],
-        f"{prefix}attack_details": data["attack_details"],
-        f"{prefix}target_countries": data["target_countries"],
-        f"{prefix}background_noise": data["background_noise"],
-        f"{prefix}background_noise_score": data["background_noise_score"],
-        f"{prefix}overall_aggressiveness": data["scores"]["overall"]["aggressiveness"],
-        f"{prefix}overall_threat": data["scores"]["overall"]["threat"],
-        f"{prefix}overall_trust": data["scores"]["overall"]["trust"],
-        f"{prefix}overall_anomaly": data["scores"]["overall"]["anomaly"],
-        f"{prefix}overall_total": data["scores"]["overall"]["total"],
-        f"{prefix}last_day_aggressiveness": data["scores"]["last_day"][
-            "aggressiveness"
-        ],
-        f"{prefix}last_day_threat": data["scores"]["last_day"]["threat"],
-        f"{prefix}last_day_trust": data["scores"]["last_day"]["trust"],
-        f"{prefix}last_day_anomaly": data["scores"]["last_day"]["anomaly"],
-        f"{prefix}last_day_total": data["scores"]["last_day"]["total"],
-        f"{prefix}last_week_aggressiveness": data["scores"]["last_week"][
-            "aggressiveness"
-        ],
-        f"{prefix}last_week_threat": data["scores"]["last_week"]["threat"],
-        f"{prefix}last_week_trust": data["scores"]["last_week"]["trust"],
-        f"{prefix}last_week_anomaly": data["scores"]["last_week"]["anomaly"],
-        f"{prefix}last_week_total": data["scores"]["last_week"]["total"],
-        f"{prefix}last_month_aggressiveness": data["scores"]["last_month"][
-            "aggressiveness"
-        ],
-        f"{prefix}last_month_threat": data["scores"]["last_month"]["threat"],
-        f"{prefix}last_month_trust": data["scores"]["last_month"]["trust"],
-        f"{prefix}last_month_anomaly": data["scores"]["last_month"]["anomaly"],
-        f"{prefix}last_month_total": data["scores"]["last_month"]["total"],
-        f"{prefix}references": data["references"],
+        f"{prefix}reputation": data.get("reputation"),
+        f"{prefix}confidence": data.get("confidence"),
+        f"{prefix}ip_range_score": data.get("ip_range_score"),
+        f"{prefix}ip": data.get("ip"),
+        f"{prefix}ip_range": data.get("ip_range"),
+        f"{prefix}ip_range_24": data.get("ip_range_24"),
+        f"{prefix}ip_range_24_reputation": data.get("ip_range_24_reputation"),
+        f"{prefix}ip_range_24_score": data.get("ip_range_24_score"),
+        f"{prefix}as_name": data.get("as_name"),
+        f"{prefix}as_num": data.get("as_num"),
+        f"{prefix}country": location.get("country"),
+        f"{prefix}city": location.get("city"),
+        f"{prefix}latitude": location.get("latitude"),
+        f"{prefix}longitude": location.get("longitude"),
+        f"{prefix}reverse_dns": data.get("reverse_dns"),
+        f"{prefix}behaviors": data.get("behaviors"),
+        f"{prefix}mitre_techniques": data.get("mitre_techniques"),
+        f"{prefix}cves": data.get("cves"),
+        f"{prefix}first_seen": history.get("first_seen"),
+        f"{prefix}last_seen": history.get("last_seen"),
+        f"{prefix}full_age": history.get("full_age"),
+        f"{prefix}days_age": history.get("days_age"),
+        f"{prefix}false_positives": classifications.get("false_positives"),
+        f"{prefix}classifications": classifications.get("classifications"),
+        f"{prefix}attack_details": data.get("attack_details"),
+        f"{prefix}target_countries": data.get("target_countries"),
+        f"{prefix}background_noise": data.get("background_noise"),
+        f"{prefix}background_noise_score": data.get("background_noise_score"),
+        f"{prefix}overall_aggressiveness": overall.get("aggressiveness"),
+        f"{prefix}overall_threat": overall.get("threat"),
+        f"{prefix}overall_trust": overall.get("trust"),
+        f"{prefix}overall_anomaly": overall.get("anomaly"),
+        f"{prefix}overall_total": overall.get("total"),
+        f"{prefix}last_day_aggressiveness": last_day.get("aggressiveness"),
+        f"{prefix}last_day_threat": last_day.get("threat"),
+        f"{prefix}last_day_trust": last_day.get("trust"),
+        f"{prefix}last_day_anomaly": last_day.get("anomaly"),
+        f"{prefix}last_day_total": last_day.get("total"),
+        f"{prefix}last_week_aggressiveness": last_week.get("aggressiveness"),
+        f"{prefix}last_week_threat": last_week.get("threat"),
+        f"{prefix}last_week_trust": last_week.get("trust"),
+        f"{prefix}last_week_anomaly": last_week.get("anomaly"),
+        f"{prefix}last_week_total": last_week.get("total"),
+        f"{prefix}last_month_aggressiveness": last_month.get("aggressiveness"),
+        f"{prefix}last_month_threat": last_month.get("threat"),
+        f"{prefix}last_month_trust": last_month.get("trust"),
+        f"{prefix}last_month_anomaly": last_month.get("anomaly"),
+        f"{prefix}last_month_total": last_month.get("total"),
+        f"{prefix}references": data.get("references"),
     }
 
     for field, value in mapped_fields.items():
@@ -127,8 +137,15 @@ class CsSmokeCommand(StreamingCommand):
         require=False,
     )
 
+    profile = Option(
+        doc="""
+        **Syntax:** **profile=***<profile_name>*
+        **Description:** Optional profile name to use for configuration: base, anonymous, ip_range""",
+        require=False,
+    )
+
     def stream(self, records):
-        self.api_key = self.load_api_key()
+        self.api_key = load_api_key(self.service)
         if not self.api_key:
             raise Exception(
                 "No API Key found, please configure the app with CrowdSec CTI API Key"
@@ -142,31 +159,46 @@ class CsSmokeCommand(StreamingCommand):
             if not allowed_fields:
                 allowed_fields = None
 
+        if self.profile:
+            profile_fields = CROWDSEC_PROFILES.get(self.profile)
+            if profile_fields is None:
+                raise Exception(f"Profile '{self.profile}' not found")
+
+            # allow to specify both profile and fields, combine them
+            if not allowed_fields:
+                allowed_fields = []
+            allowed_fields.extend(profile_fields)
+
         batching_enabled, batch_size = self._load_batching_settings()
-        local_dump_enabled = self._load_local_dump_settings()
+        local_dump_enabled = load_local_dump_settings(self.service)
         max_batch_size = batch_size if batching_enabled else 1
 
         yield from self._process_records(
             records, allowed_fields, max_batch_size, local_dump_enabled
         )
 
-    def get_headers(self):
-        """Get headers for API requests"""
-        headers = {
-            "x-api-key": self.api_key,
-            "Accept": "application/json",
-            "User-Agent": "crowdSec-splunk-app/v1.2.3",
-        }
-        return headers
-
-    def load_api_key(self):
-        """Load API key from storage passwords"""
-        api_key = None
-        for passw in self.service.storage_passwords.list():
-            if passw.name == "crowdsec-splunk-app_realm:api_key:":
-                api_key = passw.clear_password
-                break
-        return api_key
+    def _load_batching_settings(self):
+        batching = False
+        batch_size = DEFAULT_BATCH_SIZE
+        try:
+            for conf in self.service.confs.list():
+                if conf.name == "crowdsec_settings":
+                    stanza = conf.list()[0]  # TODO : clean this up
+                    if stanza:
+                        batching = stanza.content.get("batching", "0").lower() == "1"
+                        raw_size = stanza.content.get("batch_size", DEFAULT_BATCH_SIZE)
+                        try:
+                            parsed_size = int(raw_size)
+                            if parsed_size in ALLOWED_BATCH_SIZES:
+                                batch_size = parsed_size
+                        except (TypeError, ValueError):
+                            self.logger.debug(
+                                "Invalid batch_size '%s' in config, using default",
+                                raw_size,
+                            )
+        except Exception as exc:
+            self.logger.debug("Unable to load batching settings: %s", exc)
+        return batching, batch_size
 
     def _add_default_fields_to_record(self, record, allowed_fields):
         allowed = set(allowed_fields) if allowed_fields else None
@@ -279,78 +311,92 @@ class CsSmokeCommand(StreamingCommand):
         if buffer:
             yield from self._execute_batch(buffer, allowed_fields, local_dump_enabled)
 
-    def load_mmdb(self, mmdb_path):
-        """Load MMDB file if it exists and is enabled"""
-        try:
-            logger.debug(f"Loading MMDB from path: {mmdb_path}")
-            reader = maxminddb.open_database(mmdb_path)
-            logger.debug("MMDB loaded successfully")
-        except Exception as e:
-            logger.error(f"Error loading MMDB: {e}")
-            reader = None
-        return reader
-
     def load_readers(self):
         self.readers = []
-        for entry, info in MMDB_ENTRIES.items():
+        for entry, info in LOCAL_DUMP_FILES.items():
             mmdb_path, exist = get_mmdb_path(info["filename"])
             if not exist:
                 download_mmdb(info["url"], mmdb_path, self.api_key)
-            self.readers.append(self.load_mmdb(mmdb_path))
+            self.readers.append(load_mmdb(mmdb_path))
 
-    def _execute_batch(self, buffer, allowed_fields, local_dump_enabled):
-        headers = self.get_headers()
-        if local_dump_enabled:
-            self.load_readers()
-            if len(self.readers) == 0:
-                logger.error("No MMDB readers loaded, skipping local lookup")
-                return
-            for _, ip in buffer:
-                for reader in self.readers:
-                    try:
-                        result = reader.get(ip)
-                        if result:
-                            logger.info(f"IP {ip} found in local MMDB")
-                            logger.info(f"Result: {result}")
-                    except Exception as e:
-                        logger.warning(f"MMDB lookup failed for {ip}: {e}")
+    def get_data_from_readers(self, ip):
+        for reader in self.readers:
+            result = reader.get(ip)
+            if result:
+                data = json.loads(json.dumps(result))
+                # "ip" field is not included in the DB result to save space, add it here
+                data["ip"] = ip
+                return data
+        return None
 
-        if len(buffer) == 1:
-            record, ip = buffer[0]
-            yield self._enrich_single_record(record, ip, headers, allowed_fields)
-            return
+    def get_data_from_api(self, ip, headers):
+        params = (
+            ("ipAddress", ip),
+            ("verbose", ""),
+        )
+        response = req.get(
+            f"https://cti.api.crowdsec.net/v2/smoke/{ip}",
+            headers=headers,
+            params=params,
+        )
+        return response
 
-        ips = [ip for _, ip in buffer]
+    def get_data_from_api_batch(self, ips, headers):
         params = {"ips": ",".join(ips)}
         response = req.get(
             "https://cti.api.crowdsec.net/v2/smoke",
             headers=headers,
             params=params,
         )
+        return response
 
-        if response.status_code == 200:
-            payload = self._normalize_batch_response(response.json())
-            for record, ip in buffer:
-                for entry in payload:
-                    if entry.get("ip") == ip:
-                        attach_resp_to_record(
-                            record, entry, self.ipfield, allowed_fields
-                        )
-                        yield record
-                        break
-                else:
-                    record[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
-                    record[f"crowdsec_{self.ipfield}_confidence"] = "none"
-                    yield record
-        elif response.status_code == 429:
-            error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
-            for record, _ in buffer:
-                record[f"crowdsec_{self.ipfield}_error"] = error_msg
-                yield record
+    def _execute_batch(self, buffer, allowed_fields, local_dump_enabled):
+        headers = get_headers(self.api_key)
+        data = []
+        if local_dump_enabled:
+            self.load_readers()
+            if len(self.readers) == 0:
+                logger.error("No MMDB readers loaded, local lookup is not possible.")
+                return
+            for _, ip in buffer:
+                ip_info = self.get_data_from_readers(ip)
+                if ip_info:
+                    data.append(ip_info)
         else:
-            error_msg = f"Error {response.status_code} : {response.text}"
-            for record, _ in buffer:
-                record[f"crowdsec_{self.ipfield}_error"] = error_msg
+            if len(buffer) == 1:
+                record, ip = buffer[0]
+                response = self.get_data_from_api(ip, headers)
+                if response.status_code == 200:
+                    data.append(response.json())
+            else:
+                response = self.get_data_from_api_batch(
+                    [ip for _, ip in buffer], headers
+                )
+                if response.status_code == 200:
+                    data = self._normalize_batch_response(response.json())
+
+            if response.status == 429:
+                error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+                for record, _ in buffer:
+                    record[f"crowdsec_{self.ipfield}_error"] = error_msg
+                    yield record
+                return
+            else:
+                error_msg = f"Error {response.status_code} : {response.text}"
+                for record, _ in buffer:
+                    record[f"crowdsec_{self.ipfield}_error"] = error_msg
+                    yield record
+                return
+
+        for record, ip in buffer:
+            for entry in data:
+                if entry.get("ip") == ip:
+                    attach_resp_to_record(record, entry, self.ipfield, allowed_fields)
+                    yield record
+                    break
+            else:
+                record[f"crowdsec_{self.ipfield}_reputation"] = "unknown"
+                record[f"crowdsec_{self.ipfield}_confidence"] = "none"
                 yield record
 
     def _normalize_batch_response(self, data):
@@ -360,43 +406,6 @@ class CsSmokeCommand(StreamingCommand):
             and isinstance(data["items"], list)
         ):
             return data["items"]
-
-    def _load_local_dump_settings(self):
-        local_dump_enabled = False
-        try:
-            for conf in self.service.confs.list():
-                if conf.name == "crowdsec_settings":
-                    stanza = conf.list()[0]
-                    if stanza:
-                        local_dump_enabled = (
-                            stanza.content.get("local_dump", "0").lower() == "1"
-                        )
-        except Exception as exc:
-            self.logger.debug("Unable to load 'local_dump' settings: %s", exc)
-        return local_dump_enabled
-
-    def _load_batching_settings(self):
-        batching = False
-        batch_size = DEFAULT_BATCH_SIZE
-        try:
-            for conf in self.service.confs.list():
-                if conf.name == "crowdsec_settings":
-                    stanza = conf.list()[0]  # TODO : clean this up
-                    if stanza:
-                        batching = stanza.content.get("batching", "0").lower() == "1"
-                        raw_size = stanza.content.get("batch_size", DEFAULT_BATCH_SIZE)
-                        try:
-                            parsed_size = int(raw_size)
-                            if parsed_size in ALLOWED_BATCH_SIZES:
-                                batch_size = parsed_size
-                        except (TypeError, ValueError):
-                            self.logger.debug(
-                                "Invalid batch_size '%s' in config, using default",
-                                raw_size,
-                            )
-        except Exception as exc:
-            self.logger.debug("Unable to load batching settings: %s", exc)
-        return batching, batch_size
 
 
 dispatch(CsSmokeCommand, sys.argv, sys.stdin, sys.stdout, __name__)
