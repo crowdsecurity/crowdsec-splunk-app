@@ -106,6 +106,19 @@ jobs:
               exit 1
           fi
 
+          # Check in bin/crowdsec_constants.py
+          # Example: VERSION = "1.2.3"
+          PY_VERSION=$(sed -n 's/^VERSION[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' bin/crowdsec_constants.py | tr -d '\r')
+          if [[ "$PY_VERSION" == "${{ env.VERSION_NUMBER }}" ]]
+          then
+              echo "bin/crowdsec_constants.py VERSION OK"
+          else
+              echo "bin/crowdsec_constants.py VERSION KO"
+              echo "Found:    $PY_VERSION"
+              echo "Expected: ${{ env.VERSION_NUMBER }}"
+              exit 1
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

@@ -113,6 +113,7 @@ function getDefaultSettings() {
     return {
         batching: false,
         batch_size: 10,
+        local_dump: false
     };
 }
 
@@ -129,6 +130,10 @@ async function persistAdditionalSettings(service, properties) {
 
     if (typeof properties.batch_size !== "undefined" && properties.batch_size !== null) {
         settingsPayload.batch_size = String(properties.batch_size);
+    }
+
+    if (typeof properties.local_dump === "boolean") {
+        settingsPayload.local_dump = properties.local_dump ? "true" : "false";
     }
 
     if (Object.keys(settingsPayload).length === 0) {
@@ -167,6 +172,7 @@ async function readExistingSettings(service) {
         return {
             batching: props.batching ? props.batching === "1" : defaults.batching,
             batch_size: props.batch_size ? (parseInt(props.batch_size, 10) || defaults.batch_size) : defaults.batch_size,
+            local_dump: props.local_dump ? props.local_dump === "1" : defaults.local_dump,
         };
     } catch (error) {
         console.warn("Unable to load existing CrowdSec settings:", error);
