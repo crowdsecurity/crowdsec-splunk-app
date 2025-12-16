@@ -47,7 +47,7 @@ Profiles are optional presets that automatically select a predefined set of Crow
 
 - `base`: returns `ip`, `reputation`, `confidence`, `as_num`, `as_name`, `location`, `classifications`.
 
-- `anonymous`: (aliases: vpn, proxy): returns `ip`, `reputation`, `proxy_or_vpn`, `classifications`.
+- `anonymous`: (aliases: `vpn` `proxy`): returns `ip`, `reputation`, `proxy_or_vpn`, `classifications`.
 
 - `iprange`: returns `ip`, `ip_range`, `ip_range_24`, `ip_range_24_score`.
 
