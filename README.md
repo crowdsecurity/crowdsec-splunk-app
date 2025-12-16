@@ -10,13 +10,13 @@ The CrowdSec Splunk app leverages the CrowdSec's CTI API's smoke endpoint which 
 - [Overview](#overview)
 - [Example Usage](#example-usage)
 - [Results](#results)
+- [Profiles](#profiles)
 - [Local Dump](#local-dump)
 - [Configuration file](#configuration-file)
   - [`api_key`](#api_key)
   - [`batching`](#batching)
   - [`batch_size`](#batch_size)
   - [`local_dump`](#local_dump)
-- [Profiles](#profiles)
 
 
 ## Example Usage
@@ -41,6 +41,15 @@ On the event of clicking the `Search` button, users will be able to view a brief
 
 This includes but not limited to location, behaviors, classifications, attack details – name, label, description, references followed by scores, threats, etc.
 
+## Profiles
+
+Profiles are optional presets that automatically select a predefined set of CrowdSec output fields, so results stay consistent and you don’t have to manually maintain long `ipfield=` lists.
+
+- `base`: returns `ip`, `reputation`, `confidence`, `as_num`, `as_name`, `location`, `classifications`.
+
+- `anonymous`: (aliases: vpn, proxy): returns `ip`, `reputation`, `proxy_or_vpn`, `classifications`.
+
+- `iprange`: returns `ip`, `ip_range`, `ip_range_24`, `ip_range_24_score`.
 
 ## Local Dump
 
@@ -90,12 +99,3 @@ Lookup databases are download automatically every 24h.
 **Warning:** Local dump requires a CTI API key that has access to the dump endpoint.
 
 
-## Profiles
-
-Profiles are optional presets that automatically select a predefined set of CrowdSec output fields, so results stay consistent and you don’t have to manually maintain long `ipfield=` lists.
-
-- `base`: returns `ip`, `reputation`, `confidence`, `as_num`, `as_name`, `location`, `classifications`.
-
-- `anonymous`: (aliases: vpn, proxy): returns `ip`, `reputation`, `proxy_or_vpn`, `classifications`.
-
-- `iprange`: returns `ip`, `ip_range`, `ip_range_24`, `ip_range_24_score`.
