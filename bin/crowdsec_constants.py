@@ -51,5 +51,3 @@ CROWDSEC_PROFILES = {
     "proxy": ANONYMOUS_PROFILE_FIELDS,
     "iprange": IP_RANGE_PROFILE_FIELDS,
 }
-
-# | makeresults | eval ip="121.237.36.31" | cssmoke ipfield="ip"

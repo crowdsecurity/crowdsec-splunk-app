@@ -163,7 +163,7 @@ class CsSmokeCommand(StreamingCommand):
             self.load_readers()
             if not self.readers:
                 self.logger.error(
-                    "No MMDB readers loaded; local lookup is not possible."
+                    "No MMDB readers loaded; local lookup is not possible. Run '| cssmokedownload' to download the databases."
                 )
                 return
         else:

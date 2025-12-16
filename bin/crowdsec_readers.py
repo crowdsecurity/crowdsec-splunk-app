@@ -15,7 +15,7 @@ def parse_crowdsec_mmdb_result(ip, mmdb_result):
     data = json.loads(json.dumps(mmdb_result))
     data["ip"] = ip
 
-    # we don't store false proxy_or_vpn in the mmdb to save space
+    # we don't store proxy_or_vpn=false in the mmdb for now to save space
     if "proxy_or_vpn" not in data:
         data["proxy_or_vpn"] = False
 

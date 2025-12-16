@@ -1,10 +1,5 @@
-import sys
 import maxminddb
 from crowdsec_constants import VERSION
-
-
-def log(msg, *args):
-    sys.stderr.write(msg + " ".join([str(a) for a in args]) + "\n")
 
 
 def get_headers(api_key):

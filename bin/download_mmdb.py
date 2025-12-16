@@ -21,8 +21,6 @@ from crowdsec_constants import (
 from crowdsec_utils import get_headers, load_api_key
 
 
-# --- Logging: scripted input best practice ---
-# Keep operational logs out of stdout (stdout is ingested).
 logger = logging.getLogger("crowdsec_mmdb_downloader")
 logger.setLevel(logging.INFO)
 _handler = logging.StreamHandler(sys.stderr)
