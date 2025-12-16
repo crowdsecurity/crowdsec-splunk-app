@@ -5,6 +5,20 @@
 ## Overview
 The CrowdSec Splunk app leverages the CrowdSec's CTI API's smoke endpoint which enables users to query an IP and receive enrichment
 
+
+## Table of Contents
+- [Overview](#overview)
+- [Example Usage](#example-usage)
+- [Results](#results)
+- [Local Dump](#local-dump)
+- [Configuration file](#configuration-file)
+  - [`api_key`](#api_key)
+  - [`batching`](#batching)
+  - [`batch_size`](#batch_size)
+  - [`local_dump`](#local_dump)
+- [Profiles](#profiles)
+
+
 ## Example Usage
 
 The following command is used to run an IP check through the CrowdSec's CTI API's smoke endpoint. On the Homepage of Splunk Web Interface, select `Search & Reporting` and use the following command.
@@ -78,7 +92,7 @@ Lookup databases are download automatically every 24h.
 
 ## Profiles
 
-Profiles are optional presets that automatically select a predefined set of CrowdSec output fields, so results stay consistent and you don’t have to manually maintain long fields= lists. You can still combine profile with fields to further restrict what is returned.
+Profiles are optional presets that automatically select a predefined set of CrowdSec output fields, so results stay consistent and you don’t have to manually maintain long `ipfield=` lists.
 
 - `base`: returns `ip`, `reputation`, `confidence`, `as_num`, `as_name`, `location`, `classifications`.
 
