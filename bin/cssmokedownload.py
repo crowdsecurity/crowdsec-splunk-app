@@ -3,12 +3,17 @@
 import sys
 import time
 import logging
+import requests
 
 from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration
 
-from crowdsec_utils import load_api_key
+from crowdsec_utils import load_api_key, get_headers
 from crowdsec_constants import LOCAL_DUMP_FILES
-from download_mmdb import get_mmdb_local_path, download_mmdb, fetch_mmdb_download_urls
+from download_mmdb import (
+    get_mmdb_local_path,
+    fetch_mmdb_download_urls,
+    download_to_file,
+)
 
 logger = logging.getLogger("cssmokedownload")
 logger.setLevel(logging.DEBUG)
@@ -19,13 +24,8 @@ class CsSmokeDownloadCommand(GeneratingCommand):
     """
     cssmokedownload
 
-    A utility command that downloads (or refreshes) all MMDB files listed in
-    LOCAL_DUMP_FILES using the configured CrowdSec CTI API key.
-
-    Usage:
-      | cssmokedownload
-    or:
-      index=_internal | head 1 | cssmokedownload
+    Downloads (or refreshes) MMDB files listed in LOCAL_DUMP_FILES using the configured
+    CrowdSec CTI API key.
     """
 
     def generate(self):
@@ -35,98 +35,121 @@ class CsSmokeDownloadCommand(GeneratingCommand):
             "file": "",
             "path": "",
             "message": "",
-            "download_seconds": "",
+            "download_time": "",
+            "file_size": "",
         }
 
-        def yield_error(message, name="", file="", path=""):
+        def make_event(**kwargs):
             ev = base_event.copy()
-            ev.update(
-                {
-                    "status": "error",
-                    "name": name,
-                    "file": file,
-                    "path": path,
-                    "message": message,
-                    "download_seconds": "",
-                }
-            )
-            yield ev
+            ev.update(kwargs)
+            return ev
 
         api_key = load_api_key(self.service)
         if not api_key:
-            yield from yield_error("No API Key found. Configure the app first.")
-            return
-
-        try:
-            resp = fetch_mmdb_download_urls(api_key)
-        except Exception as exc:
-            yield from yield_error(
-                f"Failed to fetch MMDB download URLs: exception: {exc}"
+            yield make_event(
+                status="error", message="No API Key found. Configure the app first."
             )
             return
 
-        if resp is None:
-            yield from yield_error("Failed to fetch MMDB download URLs: empty response")
-            return
-
-        if resp.status_code != 200:
-            yield from yield_error(
-                f"Failed to fetch MMDB download URLs: HTTP {resp.status_code}: {getattr(resp, 'text', '')}"
-            )
-            return
-
+        session = requests.Session()
         try:
-            mmdb_urls = resp.json()
-        except Exception as exc:
-            yield from yield_error(f"Failed to parse MMDB download URLs JSON: {exc}")
-            return
-
-        if not isinstance(mmdb_urls, dict):
-            yield from yield_error("MMDB download URLs response is not a JSON object")
-            return
-
-        for entry, info in LOCAL_DUMP_FILES.items():
-            name = info.get("crowdsec_dump_name", entry)
-            filename = info.get("output_filename", "")
-
-            ev = base_event.copy()
-            ev.update({"name": name, "file": filename})
-
-            mmdb_info = mmdb_urls.get(name)
-            if not isinstance(mmdb_info, dict) or "url" not in mmdb_info:
-                ev["status"] = "error"
-                ev["message"] = (
-                    f"MMDB '{name}' not found (or missing url) in dump URLs response"
+            # Fetch dump index once (connection reuse via session)
+            try:
+                resp = fetch_mmdb_download_urls(session, api_key)
+            except Exception as exc:
+                yield make_event(
+                    status="error", message=f"Failed to fetch MMDB download URLs: {exc}"
                 )
-                yield ev
-                continue
+                return
+
+            if resp is None:
+                yield make_event(
+                    status="error",
+                    message="Failed to fetch MMDB download URLs: empty response",
+                )
+                return
+
+            if resp.status_code != 200:
+                txt = ""
+                try:
+                    txt = (resp.text or "")[:200]
+                except Exception:
+                    pass
+                yield make_event(
+                    status="error",
+                    message=f"Failed to fetch MMDB download URLs: HTTP {resp.status_code}: {txt}",
+                )
+                return
 
             try:
-                mmdb_path, _ = get_mmdb_local_path(filename)
-                ev["path"] = mmdb_path
+                mmdb_urls = resp.json()
             except Exception as exc:
-                ev["status"] = "error"
-                ev["message"] = f"Failed to resolve MMDB path: {exc}"
-                yield ev
-                continue
+                yield make_event(
+                    status="error",
+                    message=f"Failed to parse MMDB download URLs JSON: {exc}",
+                )
+                return
 
-            try:
-                t0 = time.perf_counter()
-                ok, err = download_mmdb(mmdb_info["url"], mmdb_path, api_key)
-                dt = time.perf_counter() - t0
-                ev["download_seconds"] = f"{dt:.2f}s"
+            if not isinstance(mmdb_urls, dict):
+                yield make_event(
+                    status="error", message="MMDB dump response is not a JSON object"
+                )
+                return
 
-                if ok:
-                    ev["status"] = "ok"
-                    ev["message"] = "Downloaded successfully"
-                else:
+            headers = get_headers(api_key)
+
+            for entry, info in LOCAL_DUMP_FILES.items():
+                dump_name = info.get("crowdsec_dump_name", entry)
+                filename = info.get("output_filename", "")
+
+                ev = make_event(name=dump_name, file=filename)
+
+                mmdb_info = mmdb_urls.get(dump_name)
+                if not isinstance(mmdb_info, dict) or "url" not in mmdb_info:
                     ev["status"] = "error"
-                    ev["message"] = "Download failed: " + err
-            except Exception as exc:
-                ev["status"] = "error"
-                ev["message"] = f"Exception during download: {exc}"
+                    ev["message"] = (
+                        f"MMDB '{dump_name}' not found (or missing url) in dump URLs response"
+                    )
+                    yield ev
+                    continue
 
-            yield ev
+                try:
+                    mmdb_path = get_mmdb_local_path(filename)
+                    ev["path"] = mmdb_path
+                except Exception as exc:
+                    ev["status"] = "error"
+                    ev["message"] = f"Failed to resolve MMDB path: {exc}"
+                    yield ev
+                    continue
+
+                try:
+                    t0 = time.perf_counter()
+                    ok, msg, size_bytes, seconds = download_to_file(
+                        session, mmdb_info["url"], mmdb_path, headers=headers
+                    )
+                    dt = time.perf_counter() - t0
+
+                    ev["download_time"] = f"{seconds:.2f}s"
+                    ev["bytes_written"] = f"{(size_bytes / (1024.0 * 1024.0)):.0f}MB"
+
+                    if ok:
+                        ev["status"] = "ok"
+                        ev["message"] = "Downloaded successfully"
+                    else:
+                        ev["status"] = "error"
+                        ev["message"] = f"Download failed: {msg}"
+
+                except Exception as exc:
+                    ev["status"] = "error"
+                    ev["message"] = f"Exception during download: {exc}"
+
+                yield ev
+
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
 
 
 dispatch(CsSmokeDownloadCommand, sys.argv, sys.stdin, sys.stdout, __name__)

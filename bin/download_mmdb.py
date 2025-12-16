@@ -1,24 +1,40 @@
 #!/usr/bin/env python
 """
-Download CrowdSec MMDB file
-Run daily via Splunk scheduler
+Download CrowdSec MMDB files (daily via Splunk scripted input).
 """
 
 import os
 import sys
-import requests
+import time
 import logging
-from crowdsec_constants import LOCAL_DUMP_FILES, CROWDSEC_API_BASE_URL
-from crowdsec_utils import get_headers, load_api_key
+import tempfile
 
+import requests
 import splunklib.client as client
 
-# Setup logging
-logger = logging.getLogger("download_mmdb")
+from crowdsec_constants import (
+    LOCAL_DUMP_FILES,
+    CROWDSEC_API_BASE_URL,
+    APP_NAME,
+    DEFAULT_SPLUNK_HOME,
+)
+from crowdsec_utils import get_headers, load_api_key
+
+
+# --- Logging: scripted input best practice ---
+# Keep operational logs out of stdout (stdout is ingested).
+logger = logging.getLogger("crowdsec_mmdb_downloader")
+logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
+)
+logger.handlers = [_handler]
+logger.propagate = False
 
 
 def get_splunk_service():
-    # Try to read a session key from stdin (for scripted input with passAuth)
+    # Prefer passAuth token when requested.
     if os.environ.get("CROWDSEC_USE_PASSTOKEN") == "1":
         session_key = sys.stdin.readline().strip()
         if session_key:
@@ -28,11 +44,10 @@ def get_splunk_service():
                 scheme="https",
                 token=session_key,
                 owner="nobody",
-                app="crowdsec-splunk-app",
-                verify=False,
+                app=APP_NAME,
+                verify=False,  # consider making configurable
             )
 
-    # Fallback with environment variables
     splunk_host = os.environ.get("SPLUNK_HOST", "localhost")
     splunk_port = int(os.environ.get("SPLUNK_PORT", "8089"))
     splunk_user = os.environ.get("SPLUNK_USERNAME", "admin")
@@ -41,7 +56,7 @@ def get_splunk_service():
     if not splunk_pass:
         raise RuntimeError("No session key and no SPLUNK_PASSWORD set")
 
-    logger.info("Loaded service using environment variables")
+    logger.info("Loaded Splunk service using environment variables")
     return client.connect(
         host=splunk_host,
         port=splunk_port,
@@ -49,122 +64,171 @@ def get_splunk_service():
         username=splunk_user,
         password=splunk_pass,
         owner="nobody",
-        app="crowdsec-splunk-app",
-        verify=False,
+        app=APP_NAME,
+        verify=False,  # consider making configurable
     )
 
 
 def get_mmdb_local_path(mmdb_file):
-    """Get path where MMDB should be stored.
-
-    Args:
-        mmdb_file: MMDB filename
-    Returns:
-        path: Full path to MMDB file and boolean indicating if it exists
-        boolean: True if file exists, False otherwise
-
-    """
-    splunk_home = os.environ.get("SPLUNK_HOME", "/opt/splunk")
-    app_path = os.path.join(splunk_home, "etc/apps/crowdsec-splunk-app/lookups/mmdb")
+    splunk_home = os.environ.get("SPLUNK_HOME", DEFAULT_SPLUNK_HOME)
+    app_path = os.path.join(splunk_home, "etc/apps", APP_NAME, "lookups/mmdb")
     os.makedirs(app_path, exist_ok=True)
     path = os.path.join(app_path, mmdb_file)
-    if not os.path.isfile(path):
-        return path, False
-    return path, True
-
-
-def fetch_mmdb_download_urls(api_key=None):
-    """
-    Call BASE_URL/v2/dump and return the mmdb info dict.
-    Expected JSON shape:
-      { "mmdb": { "url": "...", "description": "...", "expire_at": "..." }, ... }
-    """
-    url = f"{CROWDSEC_API_BASE_URL}/v2/dump"
-    headers = get_headers(api_key)
-    return requests.get(url, headers=headers, timeout=30)
-
-
-def download_mmdb(mmdb_url, mmdb_path, api_key=None):
-    """
-    Download the MMDB file mmdb_url into mmdb_path.
-    """
-    headers = get_headers(api_key)
-    try:
-        logger.debug(f"Downloading MMDB from {mmdb_url}")
-        resp = requests.get(mmdb_url, headers=headers, timeout=180)
-    except Exception as e:
-        logger.error(f"Failed to download MMDB from {mmdb_url}: {e}")
-        return False, f"Failed to download MMDB: {e}"
-
-    if resp.status_code != 200:
-        logger.error(f"Failed to download MMDB: HTTP {resp.content}")
-        return (
-            False,
-            f"Failed to download MMDB: HTTP {resp.content}",
-        )
-
-    try:
-        with open(mmdb_path, "wb") as f:
-            f.write(resp.content)
-        return True, ""
-    except Exception as e:
-        logger.error(f"Failed to save MMDB file {mmdb_path}: {e}")
-        return False, f"Failed to save MMDB file {mmdb_path}: {e}"
+    return path
 
 
 def load_local_dump_enabled(service):
-    """Check if local dump is enabled in app settings."""
     local_dump_enabled = False
     try:
         for conf in service.confs.list():
             if conf.name == "crowdsec_settings":
-                stanza = conf.list()[0]
+                stanza = conf.list()[0]  # TODO: select stanza explicitly if multiple
                 if stanza:
                     local_dump_enabled = (
                         stanza.content.get("local_dump", "0").lower() == "1"
                     )
     except Exception as exc:
-        logger.error("Unable to load 'local_dump' settings: %s", exc)
+        logger.error("Unable to load 'local_dump' setting: %s", exc)
     return local_dump_enabled
 
 
-if __name__ == "__main__":
+def fetch_mmdb_download_urls(session, api_key):
+    url = f"{CROWDSEC_API_BASE_URL}/v2/dump"
+    headers = get_headers(api_key)
+    return session.get(url, headers=headers, timeout=30)
+
+
+def download_to_file(
+    session, url, dst_path, headers, timeout=(10, 180), chunk_size=1024 * 256
+):
+    t0 = time.perf_counter()
+    bytes_written = 0
+
+    dst_dir = os.path.dirname(dst_path)
+    os.makedirs(dst_dir, exist_ok=True)
+
+    fd, tmp_path = tempfile.mkstemp(prefix=".mmdb_tmp_", dir=dst_dir)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            resp = session.get(url, headers=headers, timeout=timeout, stream=True)
+            if resp.status_code != 200:
+                text_snippet = ""
+                try:
+                    text_snippet = (resp.text or "")[:200]
+                except Exception:
+                    pass
+                return (
+                    False,
+                    f"HTTP {resp.status_code} {text_snippet}".strip(),
+                    0,
+                    time.perf_counter() - t0,
+                )
+
+            for chunk in resp.iter_content(chunk_size=chunk_size):
+                if not chunk:
+                    continue
+                f.write(chunk)
+                bytes_written += len(chunk)
+
+            f.flush()
+            os.fsync(f.fileno())
+
+        os.replace(tmp_path, dst_path)
+        return True, "", bytes_written, time.perf_counter() - t0
+
+    except Exception as exc:
+        return (
+            False,
+            f"Exception while downloading: {exc}",
+            bytes_written,
+            time.perf_counter() - t0,
+        )
+
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def main():
     service = get_splunk_service()
 
-    # if local dump is disabled, we don't download MMDB
     if not load_local_dump_enabled(service):
         logger.info("Local dump is disabled in app settings. Exiting.")
-        sys.exit(0)
+        return 0
 
-    # check if the API key is set
     api_key = load_api_key(service)
     if not api_key:
         logger.error("API key not found in Splunk storage passwords.")
-        sys.exit(1)
+        return 1
 
-    # get the URLs of the MMDB files to download
-    resp = fetch_mmdb_download_urls(api_key)
-    if resp.status_code != 200:
-        logger.error(
-            f"Failed to fetch MMDB download URLs: HTTP {resp.status_code}: {resp.content}"
-        )
-        sys.exit(1)
+    session = requests.Session()
+    try:
+        resp = fetch_mmdb_download_urls(session, api_key)
+        if resp.status_code != 200:
+            logger.error(
+                "Failed to fetch MMDB download URLs: HTTP %s: %s",
+                resp.status_code,
+                (resp.text or "")[:200],
+            )
+            return 1
 
-    mmdb_urls = resp.json()
-    for entry, info in LOCAL_DUMP_FILES.items():
-        mmdb_path, _ = get_mmdb_local_path(info["output_filename"])
-        mmdb_name = info["crowdsec_dump_name"]
-        if mmdb_name not in mmdb_urls:
-            logger.error(f"MMDB '{mmdb_name}' not found in dump URLs response")
-            sys.exit(1)
+        try:
+            mmdb_urls = resp.json()
+        except Exception as exc:
+            logger.error("Failed to parse MMDB download URLs JSON: %s", exc)
+            return 1
 
-        mmdb_info = mmdb_urls[mmdb_name]
+        if not isinstance(mmdb_urls, dict):
+            logger.error("MMDB dump response is not a JSON object.")
+            return 1
 
-        logger.info(" Downloading MMDB %s to %s", info["crowdsec_dump_name"], mmdb_path)
+        headers = get_headers(api_key)
+        any_failed = False
 
-        if download_mmdb(mmdb_info["url"], mmdb_path, api_key):
-            logger.info(f"MMDB {info['crowdsec_dump_name']} downloaded successfully")
-        else:
-            logger.error(f"Failed to download {info['crowdsec_dump_name']} MMDB file.")
-            sys.exit(1)
-    sys.exit(0)
+        for entry, info in LOCAL_DUMP_FILES.items():
+            mmdb_name = info["crowdsec_dump_name"]
+            dst_path = get_mmdb_local_path(info["output_filename"])
+
+            mmdb_info = mmdb_urls.get(mmdb_name)
+            if not isinstance(mmdb_info, dict) or "url" not in mmdb_info:
+                logger.error(
+                    "MMDB '%s' not found (or missing url) in dump URLs response",
+                    mmdb_name,
+                )
+                any_failed = True
+                continue
+
+            url = mmdb_info["url"]
+            logger.info("Downloading MMDB %s -> %s", mmdb_name, dst_path)
+
+            ok, msg, size_bytes, seconds = download_to_file(
+                session, url, dst_path, headers=headers
+            )
+            if ok:
+                logger.info(
+                    "Downloaded %s (%d bytes) in %.2fs", mmdb_name, size_bytes, seconds
+                )
+            else:
+                logger.error(
+                    "Failed to download %s: %s (after %.2fs, wrote %d bytes)",
+                    mmdb_name,
+                    msg,
+                    seconds,
+                    size_bytes,
+                )
+                any_failed = True
+
+        return 1 if any_failed else 0
+
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    sys.exit(main())

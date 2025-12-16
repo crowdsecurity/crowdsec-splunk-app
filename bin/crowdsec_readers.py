@@ -14,6 +14,11 @@ ALLOWED_DUMP_TYPES = {DUMP_TYPE_CROWDSEC, DUMP_TYPE_GEOIP_ASN}
 def parse_crowdsec_mmdb_result(ip, mmdb_result):
     data = json.loads(json.dumps(mmdb_result))
     data["ip"] = ip
+
+    # we don't store false proxy_or_vpn in the mmdb to save space
+    if "proxy_or_vpn" not in data:
+        data["proxy_or_vpn"] = False
+
     return data
 
 

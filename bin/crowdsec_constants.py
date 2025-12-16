@@ -1,9 +1,13 @@
 VERSION = "1.2.3"
+APP_NAME = "crowdsec-splunk-app"
+
+DEFAULT_SPLUNK_HOME = "/opt/splunk"
+
+CROWDSEC_API_BASE_URL = "https://cti.api.crowdsec.net"
 
 DUMP_TYPE_CROWDSEC = "crowdsec"
 DUMP_TYPE_GEOIP_ASN = "geoip_asn"
 
-CROWDSEC_API_BASE_URL = "https://cti.api.dev.crowdsec.net"
 
 ## LOCAL DUMP CONFIGURATION
 LOCAL_DUMP_FILES = {
@@ -35,6 +39,7 @@ ANONYMOUS_PROFILE_FIELDS = [
     "ip",
     "reputation",
     "proxy_or_vpn",
+    "classifications",
 ]
 
 IP_RANGE_PROFILE_FIELDS = ["ip", "ip_range", "ip_range_24", "ip_range_24_score"]
@@ -42,6 +47,8 @@ IP_RANGE_PROFILE_FIELDS = ["ip", "ip_range", "ip_range_24", "ip_range_24_score"]
 CROWDSEC_PROFILES = {
     "base": BASE_PROFILE_FIELDS,
     "anonymous": ANONYMOUS_PROFILE_FIELDS,
+    "vpn": ANONYMOUS_PROFILE_FIELDS,
+    "proxy": ANONYMOUS_PROFILE_FIELDS,
     "iprange": IP_RANGE_PROFILE_FIELDS,
 }
 
