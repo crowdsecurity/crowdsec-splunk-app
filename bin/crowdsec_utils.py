@@ -1,6 +1,10 @@
+import sys
 import maxminddb
-
 from crowdsec_constants import VERSION
+
+
+def log(msg, *args):
+    sys.stderr.write(msg + " ".join([str(a) for a in args]) + "\n")
 
 
 def get_headers(api_key):
@@ -16,6 +20,8 @@ def get_headers(api_key):
 def load_api_key(service):
     """Load API key from storage passwords"""
     api_key = None
+    if not service:
+        raise RuntimeError("Service not initialized; run as a Splunk search command")
     for passw in service.storage_passwords.list():
         if passw.name == "crowdsec-splunk-app_realm:api_key:":
             api_key = passw.clear_password

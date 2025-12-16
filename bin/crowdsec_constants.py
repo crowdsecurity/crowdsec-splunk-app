@@ -1,12 +1,24 @@
 VERSION = "1.2.3"
 
+DUMP_TYPE_CROWDSEC = "crowdsec"
+DUMP_TYPE_GEOIP_ASN = "geoip_asn"
+
+CROWDSEC_API_BASE_URL = "https://cti.api.dev.crowdsec.net"
 
 ## LOCAL DUMP CONFIGURATION
 LOCAL_DUMP_FILES = {
     "crowdsec_full_mmdb": {
-        "filename": "crowdsec_full.mmdb",
-        "name": "mmdb",
-    }
+        "output_filename": "crowdsec_full.mmdb",
+        "crowdsec_dump_name": "smoke_full_mmdb",
+        "priority": 1,
+        "dump_type": DUMP_TYPE_CROWDSEC,
+    },
+    "crowdsec_geoip_asn_mmdb": {
+        "output_filename": "crowdsec_geoip_asn.mmdb",
+        "crowdsec_dump_name": "geoip-asn-circle",
+        "priority": 2,
+        "dump_type": DUMP_TYPE_GEOIP_ASN,
+    },
 }
 
 ## PROFILES CONFIGURATION
@@ -22,12 +34,15 @@ BASE_PROFILE_FIELDS = [
 ANONYMOUS_PROFILE_FIELDS = [
     "ip",
     "reputation",
-    "classifications",
-]  # to replace 'classifications' with proxy_vpn flag when ready]
+    "proxy_or_vpn",
+]
+
 IP_RANGE_PROFILE_FIELDS = ["ip", "ip_range", "ip_range_24", "ip_range_24_score"]
 
 CROWDSEC_PROFILES = {
     "base": BASE_PROFILE_FIELDS,
-    "anonymous": BASE_PROFILE_FIELDS,
-    "ip_range": IP_RANGE_PROFILE_FIELDS,
+    "anonymous": ANONYMOUS_PROFILE_FIELDS,
+    "iprange": IP_RANGE_PROFILE_FIELDS,
 }
+
+# | makeresults | eval ip="121.237.36.31" | cssmoke ipfield="ip"

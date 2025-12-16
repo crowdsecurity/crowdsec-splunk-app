@@ -8,15 +8,13 @@ import os
 import sys
 import requests
 import logging
-from crowdsec_constants import LOCAL_DUMP_FILES
+from crowdsec_constants import LOCAL_DUMP_FILES, CROWDSEC_API_BASE_URL
 from crowdsec_utils import get_headers, load_api_key
 
 import splunklib.client as client
 
 # Setup logging
 logger = logging.getLogger("download_mmdb")
-
-BASE_URL = "https://cti.api.dev.crowdsec.net"
 
 
 def get_splunk_service():
@@ -56,7 +54,7 @@ def get_splunk_service():
     )
 
 
-def get_mmdb_path(mmdb_file):
+def get_mmdb_local_path(mmdb_file):
     """Get path where MMDB should be stored.
 
     Args:
@@ -75,69 +73,43 @@ def get_mmdb_path(mmdb_file):
     return path, True
 
 
-def fetch_mmdb_info(db_name, api_key=None):
+def fetch_mmdb_download_urls(api_key=None):
     """
     Call BASE_URL/v2/dump and return the mmdb info dict.
     Expected JSON shape:
       { "mmdb": { "url": "...", "description": "...", "expire_at": "..." }, ... }
     """
-    url = f"{BASE_URL}/v2/dump"
+    url = f"{CROWDSEC_API_BASE_URL}/v2/dump"
     headers = get_headers(api_key)
-
-    try:
-        logger.debug(f"Fetching MMDB dump metadata from {url}")
-        resp = requests.get(url, headers=headers, timeout=30)
-        data = resp.json()
-    except Exception as e:
-        logger.error(f"Failed to fetch dumps url: {e}")
-        return None
-
-    mmdb_info = data.get(db_name)
-    if not isinstance(mmdb_info, dict):
-        logger.error(
-            f"MMDB '{db_name}' metadata missing or invalid in /v2/dump response"
-        )
-        return None
-
-    if "url" not in mmdb_info:
-        logger.error(f"MMDB '{db_name}' metadata does not contain 'url' field")
-        return None
-
-    return mmdb_info
+    return requests.get(url, headers=headers, timeout=30)
 
 
-def download_mmdb(db_name, mmdb_path, api_key=None):
+def download_mmdb(mmdb_url, mmdb_path, api_key=None):
     """
-    Fetch MMDB metadata from BASE_URL/v2/dump and download the MMDB file
-    from the returned mmdb.url into mmdb_path.
+    Download the MMDB file mmdb_url into mmdb_path.
     """
-    mmdb_info = fetch_mmdb_info(db_name, api_key)
-    if not mmdb_info:
-        return False
-
-    mmdb_url = mmdb_info["url"]
     headers = get_headers(api_key)
-
     try:
         logger.debug(f"Downloading MMDB from {mmdb_url}")
-        resp = requests.get(mmdb_url, headers=headers, timeout=60)
+        resp = requests.get(mmdb_url, headers=headers, timeout=180)
     except Exception as e:
         logger.error(f"Failed to download MMDB from {mmdb_url}: {e}")
-        return False
+        return False, f"Failed to download MMDB: {e}"
 
     if resp.status_code != 200:
-        logger.error(
-            f"Failed to download MMDB from {mmdb_url}: HTTP {resp.status_code}"
+        logger.error(f"Failed to download MMDB: HTTP {resp.content}")
+        return (
+            False,
+            f"Failed to download MMDB: HTTP {resp.content}",
         )
-        return False
 
     try:
         with open(mmdb_path, "wb") as f:
             f.write(resp.content)
-        return True
+        return True, ""
     except Exception as e:
         logger.error(f"Failed to save MMDB file {mmdb_path}: {e}")
-        return False
+        return False, f"Failed to save MMDB file {mmdb_path}: {e}"
 
 
 def load_local_dump_enabled(service):
@@ -170,13 +142,29 @@ if __name__ == "__main__":
         logger.error("API key not found in Splunk storage passwords.")
         sys.exit(1)
 
-    # download all MMDB files
+    # get the URLs of the MMDB files to download
+    resp = fetch_mmdb_download_urls(api_key)
+    if resp.status_code != 200:
+        logger.error(
+            f"Failed to fetch MMDB download URLs: HTTP {resp.status_code}: {resp.content}"
+        )
+        sys.exit(1)
+
+    mmdb_urls = resp.json()
     for entry, info in LOCAL_DUMP_FILES.items():
-        mmdb_path, _ = get_mmdb_path(info["filename"])
-        logger.info(" Downloading MMDB %s to %s", info["name"], mmdb_path)
-        if download_mmdb(info["name"], mmdb_path, api_key):
-            logger.info(f"MMDB {info['name']} downloaded successfully")
+        mmdb_path, _ = get_mmdb_local_path(info["output_filename"])
+        mmdb_name = info["crowdsec_dump_name"]
+        if mmdb_name not in mmdb_urls:
+            logger.error(f"MMDB '{mmdb_name}' not found in dump URLs response")
+            sys.exit(1)
+
+        mmdb_info = mmdb_urls[mmdb_name]
+
+        logger.info(" Downloading MMDB %s to %s", info["crowdsec_dump_name"], mmdb_path)
+
+        if download_mmdb(mmdb_info["url"], mmdb_path, api_key):
+            logger.info(f"MMDB {info['crowdsec_dump_name']} downloaded successfully")
         else:
-            logger.error(f"Failed to download {info['name']} MMDB file.")
+            logger.error(f"Failed to download {info['crowdsec_dump_name']} MMDB file.")
             sys.exit(1)
     sys.exit(0)

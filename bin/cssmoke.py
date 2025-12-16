@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
 import sys
-import os
-import json
 import requests as req
 import logging
+import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from splunklib.searchcommands import (
     dispatch,
     StreamingCommand,
@@ -15,24 +13,20 @@ from splunklib.searchcommands import (
     validators,
 )
 
-from download_mmdb import get_mmdb_path, download_mmdb
-from crowdsec_utils import (
-    get_headers,
-    load_mmdb,
-    load_local_dump_settings,
-    load_api_key,
+from download_mmdb import get_mmdb_local_path
+from crowdsec_utils import get_headers, load_local_dump_settings, load_api_key, log
+from crowdsec_constants import (
+    LOCAL_DUMP_FILES,
+    CROWDSEC_PROFILES,
+    CROWDSEC_API_BASE_URL,
 )
-from crowdsec_constants import LOCAL_DUMP_FILES, CROWDSEC_PROFILES
+from crowdsec_readers import Reader
 
 DEFAULT_BATCH_SIZE = 10
 ALLOWED_BATCH_SIZES = {10, 20, 50, 100}
 
 logger = logging.getLogger("cssmoke")
 logger.setLevel(logging.DEBUG)
-
-
-def log(msg, *args):
-    sys.stderr.write(msg + " ".join([str(a) for a in args]) + "\n")
 
 
 def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
@@ -58,6 +52,7 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
         f"{prefix}ip_range_24": data.get("ip_range_24"),
         f"{prefix}ip_range_24_reputation": data.get("ip_range_24_reputation"),
         f"{prefix}ip_range_24_score": data.get("ip_range_24_score"),
+        f"{prefix}proxy_or_vpn": data.get("proxy_or_vpn"),
         f"{prefix}as_name": data.get("as_name"),
         f"{prefix}as_num": data.get("as_num"),
         f"{prefix}country": location.get("country"),
@@ -99,6 +94,8 @@ def attach_resp_to_record(record, data, ipfield, allowed_fields=None):
         f"{prefix}last_month_anomaly": last_month.get("anomaly"),
         f"{prefix}last_month_total": last_month.get("total"),
         f"{prefix}references": data.get("references"),
+        f"{prefix}query_time": data.get("query_time"),
+        f"{prefix}query_mode": data.get("query_mode"),
     }
 
     for field, value in mapped_fields.items():
@@ -145,6 +142,7 @@ class CsSmokeCommand(StreamingCommand):
     )
 
     def stream(self, records):
+        self.t0 = time.perf_counter()
         self.api_key = load_api_key(self.service)
         if not self.api_key:
             raise Exception(
@@ -172,6 +170,15 @@ class CsSmokeCommand(StreamingCommand):
         batching_enabled, batch_size = self._load_batching_settings()
         local_dump_enabled = load_local_dump_settings(self.service)
         max_batch_size = batch_size if batching_enabled else 1
+
+        if local_dump_enabled:
+            self.load_readers()
+            if len(self.readers) == 0:
+                log("No MMDB readers loaded, local lookup is not possible.")
+                return
+        else:
+            # init session
+            pass
 
         yield from self._process_records(
             records, allowed_fields, max_batch_size, local_dump_enabled
@@ -254,6 +261,9 @@ class CsSmokeCommand(StreamingCommand):
             f"{prefix}last_month_anomaly": "",
             f"{prefix}last_month_total": "",
             f"{prefix}references": "",
+            f"{prefix}proxy_or_vpn": "",
+            f"{prefix}query_time": "",
+            f"{prefix}query_mode": "",
         }
 
         for field, value in default_fields.items():
@@ -267,7 +277,7 @@ class CsSmokeCommand(StreamingCommand):
             ("verbose", ""),
         )
         response = req.get(
-            f"https://cti.api.crowdsec.net/v2/smoke/{record_dest_ip}",
+            f"{CROWDSEC_API_BASE_URL}/v2/smoke/{record_dest_ip}",
             headers=headers,
             params=params,
         )
@@ -313,20 +323,33 @@ class CsSmokeCommand(StreamingCommand):
 
     def load_readers(self):
         self.readers = []
-        for entry, info in LOCAL_DUMP_FILES.items():
-            mmdb_path, exist = get_mmdb_path(info["filename"])
+
+        entries = sorted(
+            LOCAL_DUMP_FILES.items(),
+            key=lambda kv: int(kv[1].get("priority", 999999)),
+        )
+        for entry, info in entries:
+            mmdb_path, exist = get_mmdb_local_path(info["output_filename"])
             if not exist:
-                download_mmdb(info["url"], mmdb_path, self.api_key)
-            self.readers.append(load_mmdb(mmdb_path))
+                raise Exception(
+                    f"MMDB file '{info['name']}' not found, run 'cssmokedownload' command to download the CrowdSec lookup database."
+                )
+
+            self.readers.append(
+                Reader(
+                    name=entry,
+                    output_filename=info["output_filename"],
+                    output_path=mmdb_path,
+                    dump_type=info["dump_type"],
+                    priority=info["priority"],
+                )
+            )
 
     def get_data_from_readers(self, ip):
         for reader in self.readers:
             result = reader.get(ip)
             if result:
-                data = json.loads(json.dumps(result))
-                # "ip" field is not included in the DB result to save space, add it here
-                data["ip"] = ip
-                return data
+                return result
         return None
 
     def get_data_from_api(self, ip, headers):
@@ -335,7 +358,7 @@ class CsSmokeCommand(StreamingCommand):
             ("verbose", ""),
         )
         response = req.get(
-            f"https://cti.api.crowdsec.net/v2/smoke/{ip}",
+            f"{CROWDSEC_API_BASE_URL}/v2/smoke/{ip}",
             headers=headers,
             params=params,
         )
@@ -344,7 +367,7 @@ class CsSmokeCommand(StreamingCommand):
     def get_data_from_api_batch(self, ips, headers):
         params = {"ips": ",".join(ips)}
         response = req.get(
-            "https://cti.api.crowdsec.net/v2/smoke",
+            f"{CROWDSEC_API_BASE_URL}/v2/smoke",
             headers=headers,
             params=params,
         )
@@ -354,10 +377,6 @@ class CsSmokeCommand(StreamingCommand):
         headers = get_headers(self.api_key)
         data = []
         if local_dump_enabled:
-            self.load_readers()
-            if len(self.readers) == 0:
-                logger.error("No MMDB readers loaded, local lookup is not possible.")
-                return
             for _, ip in buffer:
                 ip_info = self.get_data_from_readers(ip)
                 if ip_info:
@@ -375,22 +394,28 @@ class CsSmokeCommand(StreamingCommand):
                 if response.status_code == 200:
                     data = self._normalize_batch_response(response.json())
 
-            if response.status == 429:
-                error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
-                for record, _ in buffer:
-                    record[f"crowdsec_{self.ipfield}_error"] = error_msg
-                    yield record
-                return
-            else:
-                error_msg = f"Error {response.status_code} : {response.text}"
-                for record, _ in buffer:
-                    record[f"crowdsec_{self.ipfield}_error"] = error_msg
-                    yield record
-                return
+            if response.status_code != 200:
+                if response.status_code == 429:
+                    error_msg = '"Quota exceeded for CrowdSec CTI API. Please visit https://www.crowdsec.net/pricing to upgrade your plan."'
+                    for record, _ in buffer:
+                        record[f"crowdsec_{self.ipfield}_error"] = error_msg
+                        yield record
+                    return
+                else:
+                    error_msg = f"Error {response.status_code} : {response.text}"
+                    for record, _ in buffer:
+                        record[f"crowdsec_{self.ipfield}_error"] = error_msg
+                        yield record
+                    return
+
+        process_time = time.perf_counter() - self.t0
+        mode = "local_dump" if local_dump_enabled else "api"
 
         for record, ip in buffer:
             for entry in data:
                 if entry.get("ip") == ip:
+                    entry["query_time"] = f"{process_time:.2f}s"
+                    entry["query_mode"] = mode
                     attach_resp_to_record(record, entry, self.ipfield, allowed_fields)
                     yield record
                     break
@@ -406,6 +431,8 @@ class CsSmokeCommand(StreamingCommand):
             and isinstance(data["items"], list)
         ):
             return data["items"]
+
+        return []
 
 
 dispatch(CsSmokeCommand, sys.argv, sys.stdin, sys.stdout, __name__)
