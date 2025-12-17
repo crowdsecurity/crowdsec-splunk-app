@@ -26,7 +26,6 @@ from crowdsec_constants import (
 )
 from crowdsec_readers import Reader
 
-
 DEFAULT_BATCH_SIZE = 10
 ALLOWED_BATCH_SIZES = {10, 20, 50, 100}
 
@@ -126,8 +125,8 @@ class CsSmokeCommand(StreamingCommand):
 
     profile = Option(
         doc="""
-        **Syntax:** **profile=***<profile_name>*
-        **Description:** Optional profile name to use for configuration: base, anonymous, ip_range""",
+        **Syntax:** **profile=***<profile1[,profile2,...]>*
+        **Description:** Optional profile name(s) to use for configuration (merged): base, anonymous, ip_range, ...""",
         require=False,
     )
 
@@ -147,13 +146,24 @@ class CsSmokeCommand(StreamingCommand):
                 allowed_fields = None
 
         if self.profile:
-            profile_fields = CROWDSEC_PROFILES.get(self.profile)
-            if profile_fields is None:
-                raise Exception(f"Profile '{self.profile}' not found")
+            selected_profiles = [
+                p.strip() for p in self.profile.split(",") if p.strip()
+            ]
+            if not selected_profiles:
+                raise Exception(
+                    "profile option was provided but no profile name was parsed"
+                )
+
+            merged_profile_fields = []
+            for prof in selected_profiles:
+                profile_fields = CROWDSEC_PROFILES.get(prof)
+                if profile_fields is None:
+                    raise Exception(f"Profile '{prof}' not found")
+                merged_profile_fields.extend(profile_fields)
 
             if not allowed_fields:
                 allowed_fields = []
-            allowed_fields.extend(profile_fields)
+            allowed_fields.extend(merged_profile_fields)
 
         batching_enabled, batch_size = self._load_batching_settings()
         local_dump_enabled = load_local_dump_settings(self.service)
@@ -321,8 +331,17 @@ class CsSmokeCommand(StreamingCommand):
             )
 
     def get_data_from_readers(self, ip):
+        result = {}
         for reader in self.readers:
-            result = reader.get(ip)
+            data = reader.get(ip)
+            if not data:
+                continue
+            result.update(data)
+
+            # if country is not found, continue to next reader
+            if "location" not in result:
+                continue
+
             if result:
                 return result
         return None

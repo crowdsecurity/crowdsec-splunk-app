@@ -34,7 +34,7 @@ The following command is used to run an IP check through the CrowdSec's CTI API'
     - It denotes the field name where the IP address is stored in the index.
 
 - `profile`:
-    Optional preset that selects a predefined set of CrowdSec output fields.
+    Optional preset that selects a predefined set of CrowdSec output fields (it is possible to specify mutliple profiles).
 
 ## Results
 On the event of clicking the `Search` button, users will be able to view a brief overview of various fields associated with the input IP address. 
@@ -50,6 +50,14 @@ Profiles are optional presets that automatically select a predefined set of Crow
 - `anonymous`: (aliases: `vpn` `proxy`): returns `ip`, `reputation`, `proxy_or_vpn`, `classifications`.
 
 - `iprange`: returns `ip`, `ip_range`, `ip_range_24`, `ip_range_24_score`.
+
+You can provide multiple profile in the same command:
+
+```
+| cssmoke ipfield="ip" profile="anonymous,iprange"
+```
+
+The output will contains the columns for the `anonymous` and the `iprange` profiles.
 
 ## Local Dump
 

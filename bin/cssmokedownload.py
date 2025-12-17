@@ -4,8 +4,15 @@ import sys
 import time
 import logging
 import requests
+import os
+import datetime
 
-from splunklib.searchcommands import dispatch, GeneratingCommand, Configuration
+from splunklib.searchcommands import (
+    dispatch,
+    GeneratingCommand,
+    Configuration,
+    Option,
+)
 
 from crowdsec_utils import load_api_key, get_headers
 from crowdsec_constants import LOCAL_DUMP_FILES
@@ -26,23 +33,91 @@ class CsSmokeDownloadCommand(GeneratingCommand):
 
     Downloads (or refreshes) MMDB files listed in LOCAL_DUMP_FILES using the configured
     CrowdSec CTI API key.
+
+    Also supports an "info" mode to display local dump file information.
     """
+
+    mode = Option(
+        doc="""
+        **Syntax:** **mode=***<download|info>*
+        **Description:** download (default) fetches/refreshes MMDBs; info shows local MMDB status without downloading.
+        """,
+        require=False,
+        default="download",
+    )
+
+    def _file_info(self, path):
+        """
+        Returns (exists, last_update_str, size_mb_str).
+        """
+        if not path or not os.path.exists(path):
+            return False, "", ""
+        try:
+            st = os.stat(path)
+            # Use local time; if you prefer UTC replace fromtimestamp with utcfromtimestamp.
+            last_update = datetime.datetime.fromtimestamp(st.st_mtime).isoformat(
+                timespec="seconds"
+            )
+            size_mb = st.st_size / (1024.0 * 1024.0)
+            return True, last_update, f"{size_mb:.0f}MB"
+        except Exception:
+            return True, "", ""
 
     def generate(self):
         base_event = {
+            "last_update": "",
             "status": "",
             "name": "",
             "file": "",
             "path": "",
             "message": "",
+            "file_size_mb": "",
             "download_time": "",
-            "file_size": "",
         }
 
         def make_event(**kwargs):
             ev = base_event.copy()
             ev.update(kwargs)
             return ev
+
+        mode = (self.mode or "download").strip().lower()
+
+        # INFO MODE: no API calls, no downloads
+        if mode == "info":
+            for entry, info in LOCAL_DUMP_FILES.items():
+                dump_name = info.get("crowdsec_dump_name", entry)
+                filename = info.get("output_filename", "")
+                ev = make_event(name=dump_name, file=filename)
+
+                try:
+                    mmdb_path = get_mmdb_local_path(filename)
+                    ev["path"] = mmdb_path
+                except Exception as exc:
+                    ev["status"] = "error"
+                    ev["message"] = f"Failed to resolve MMDB path: {exc}"
+                    yield ev
+                    continue
+
+                exists, last_update, size_mb = self._file_info(mmdb_path)
+                if not exists:
+                    ev["status"] = "missing"
+                    ev["message"] = "File not found; run 'cssmokedownload' to download."
+                else:
+                    ev["status"] = "ok"
+                    ev["message"] = "File exists."
+                    ev["last_update"] = last_update
+                    ev["file_size_mb"] = size_mb
+
+                yield ev
+            return
+
+        # DOWNLOAD MODE (default)
+        if mode not in ("download", ""):
+            yield make_event(
+                status="error",
+                message=f"Invalid mode '{self.mode}'. Use 'download' or 'info'.",
+            )
+            return
 
         api_key = load_api_key(self.service)
         if not api_key:
@@ -127,14 +202,20 @@ class CsSmokeDownloadCommand(GeneratingCommand):
                     ok, msg, size_bytes, seconds = download_to_file(
                         session, mmdb_info["url"], mmdb_path, headers=headers
                     )
-                    dt = time.perf_counter() - t0
+                    _ = time.perf_counter() - t0  # dt currently unused
 
                     ev["download_time"] = f"{seconds:.2f}s"
-                    ev["bytes_written"] = f"{(size_bytes / (1024.0 * 1024.0)):.0f}MB"
+                    ev["file_size_mb"] = f"{(size_bytes / (1024.0 * 1024.0)):.0f}MB"
+
+                    # Refresh local stat info after download (best-effort)
+                    exists, last_update, size_mb = self._file_info(mmdb_path)
+                    if exists:
+                        ev["last_update"] = last_update
+                        ev["file_size_mb"] = size_mb
 
                     if ok:
                         ev["status"] = "ok"
-                        ev["message"] = "Downloaded successfully"
+                        ev["message"] = "Downloaded successfully."
                     else:
                         ev["status"] = "error"
                         ev["message"] = f"Download failed: {msg}"

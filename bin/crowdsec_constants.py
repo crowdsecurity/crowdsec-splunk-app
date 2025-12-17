@@ -3,7 +3,7 @@ APP_NAME = "crowdsec-splunk-app"
 
 DEFAULT_SPLUNK_HOME = "/opt/splunk"
 
-CROWDSEC_API_BASE_URL = "https://cti.api.crowdsec.net"
+CROWDSEC_API_BASE_URL = "https://cti.api.dev.crowdsec.net"
 
 DUMP_TYPE_CROWDSEC = "crowdsec"
 DUMP_TYPE_GEOIP_ASN = "geoip_asn"
@@ -44,10 +44,13 @@ ANONYMOUS_PROFILE_FIELDS = [
 
 IP_RANGE_PROFILE_FIELDS = ["ip", "ip_range", "ip_range_24", "ip_range_24_score"]
 
+DEBUG_PROFILE_FIELDS = ["ip", "query_time", "query_mode"]
+
 CROWDSEC_PROFILES = {
     "base": BASE_PROFILE_FIELDS,
     "anonymous": ANONYMOUS_PROFILE_FIELDS,
     "vpn": ANONYMOUS_PROFILE_FIELDS,
     "proxy": ANONYMOUS_PROFILE_FIELDS,
     "iprange": IP_RANGE_PROFILE_FIELDS,
+    "debug": DEBUG_PROFILE_FIELDS,
 }
