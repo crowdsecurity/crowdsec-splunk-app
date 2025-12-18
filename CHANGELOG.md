@@ -12,9 +12,9 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ---
 
-## [1.2.3](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.3) - 2025-11-25
+## [1.2.4](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.4) - 2025-11-25
 
-[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.2...v1.2.3)
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.2...v1.2.4)
 
 ### Changed
 
