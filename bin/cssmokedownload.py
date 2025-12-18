@@ -54,7 +54,6 @@ class CsSmokeDownloadCommand(GeneratingCommand):
             return False, "", ""
         try:
             st = os.stat(path)
-            # Use local time; if you prefer UTC replace fromtimestamp with utcfromtimestamp.
             last_update = datetime.datetime.fromtimestamp(st.st_mtime).isoformat(
                 timespec="seconds"
             )
@@ -111,7 +110,6 @@ class CsSmokeDownloadCommand(GeneratingCommand):
                 yield ev
             return
 
-        # DOWNLOAD MODE (default)
         if mode not in ("download", ""):
             yield make_event(
                 status="error",
@@ -128,7 +126,6 @@ class CsSmokeDownloadCommand(GeneratingCommand):
 
         session = requests.Session()
         try:
-            # Fetch dump index once (connection reuse via session)
             try:
                 resp = fetch_mmdb_download_urls(session, api_key)
             except Exception as exc:
@@ -202,7 +199,7 @@ class CsSmokeDownloadCommand(GeneratingCommand):
                     ok, msg, size_bytes, seconds = download_to_file(
                         session, mmdb_info["url"], mmdb_path, headers=headers
                     )
-                    _ = time.perf_counter() - t0  # dt currently unused
+                    _ = time.perf_counter() - t0
 
                     ev["download_time"] = f"{seconds:.2f}s"
                     ev["file_size_mb"] = f"{(size_bytes / (1024.0 * 1024.0)):.0f}MB"

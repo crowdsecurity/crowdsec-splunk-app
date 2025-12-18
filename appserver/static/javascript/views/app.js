@@ -329,7 +329,17 @@ define(["react", "splunkjs/splunk"], function (react, splunk_js_sdk) {
                 "Upload a JSON config file to pre-fill the form. You can still edit values before saving."
               ),
               e("div", { style: { marginBottom: "10px", fontSize: "13px" } }, [
-                "Example: ",
+                "Resources: ",
+                e(
+                  "a",
+                  {
+                    href: "https://doc.crowdsec.net/u/cti_api/api_integration/integration_splunk_siem",
+                    target: "_blank",
+                    rel: "noreferrer",
+                  },
+                  "Documentation"
+                ),
+                " • Example: ",
                 e(
                   "a",
                   {

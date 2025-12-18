@@ -3,7 +3,7 @@ APP_NAME = "crowdsec-splunk-app"
 
 DEFAULT_SPLUNK_HOME = "/opt/splunk"
 
-CROWDSEC_API_BASE_URL = "https://cti.api.dev.crowdsec.net"
+CROWDSEC_API_BASE_URL = "https://cti.api.crowdsec.net"
 
 DUMP_TYPE_CROWDSEC = "crowdsec"
 DUMP_TYPE_GEOIP_ASN = "geoip_asn"
