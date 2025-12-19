@@ -9,6 +9,7 @@
   - [Prepare local environment](#prepare-local-environment)
   - [Run docker](#run-docker)
   - [Test the app](#test-the-app)
+- [Test Javascript and CSS code](#test-javascript-and-css-code)
 - [Inspect your app locally](#inspect-your-app-locally)
 - [Some resources for developers](#some-resources-for-developers)
 - [Update documentation table of contents](#update-documentation-table-of-contents)
