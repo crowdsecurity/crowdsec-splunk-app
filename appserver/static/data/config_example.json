@@ -1,0 +1,6 @@
+{
+    "api_key": "YOUR_CROWDSEC_CTI_KEY",
+    "batching": false,
+    "batch_size": 10,
+    "local_dump": false
+}
