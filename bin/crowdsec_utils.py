@@ -38,3 +38,43 @@ def load_local_dump_settings(service):
                     stanza.content.get("local_dump", "0").lower() == "1"
                 )
     return local_dump_enabled
+
+
+VPN_PROVIDER = ["m247", "Datacamp", "PacketHub", "Proton AG", "Clouvider limited"]
+
+
+import logging
+import sys
+
+logger = logging.getLogger("crowdsec_mmdb_downloader")
+logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
+)
+logger.handlers = [_handler]
+logger.propagate = False
+
+
+def set_vpn(entry):
+    as_name = entry.get("as_name")
+    if not as_name:
+        return entry
+
+    for provider in VPN_PROVIDER:
+        if provider.lower() in as_name.lower():
+            entry["proxy_or_vpn"] = True
+            if "classifications" not in entry:
+                entry["classifications"] = dict()
+            if "classifications" not in entry["classifications"]:
+                entry["classifications"]["classifications"] = list()
+            entry["classifications"]["classifications"].append(
+                {
+                    "description": "IP exposes a VPN service or is being flagged as one.",
+                    "label": "VPN",
+                    "name": "proxy:vpn",
+                },
+            )
+            return entry
+
+    return entry

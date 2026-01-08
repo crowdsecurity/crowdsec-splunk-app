@@ -12,6 +12,15 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ---
 
+## [1.2.5](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.5) - 2026-01-08
+
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.4...v1.2.5)
+
+### Changed
+
+- Support basic tagging of VPN.
+
+
 ## [1.2.4](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.4) - 2025-12-19
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.3...v1.2.4)
@@ -22,7 +31,7 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 - `cssmoke`: new "profile" option, to display a preset of columns
 - `cssmokedownload`: new command to download the CrowdSec offline replication
 
-## [1.2.4](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.3) - 2025-11-25
+## [1.2.3](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.3) - 2025-11-25
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.2...v1.2.3)
 

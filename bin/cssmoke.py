@@ -14,11 +14,7 @@ from splunklib.searchcommands import (
 )
 
 from download_mmdb import get_mmdb_local_path
-from crowdsec_utils import (
-    get_headers,
-    load_local_dump_settings,
-    load_api_key,
-)
+from crowdsec_utils import get_headers, load_local_dump_settings, load_api_key, set_vpn
 from crowdsec_constants import (
     LOCAL_DUMP_FILES,
     CROWDSEC_PROFILES,
@@ -317,7 +313,7 @@ class CsSmokeCommand(StreamingCommand):
             mmdb_path = get_mmdb_local_path(info["output_filename"])
             if not os.path.isfile(mmdb_path):
                 raise Exception(
-                    f"MMDB file '{info['name']}' not found, run 'cssmokedownload' command to download the CrowdSec lookup database."
+                    f"MMDB file '{info['crowdsec_dump_name']}' not found, run 'cssmokedownload' command to download the CrowdSec lookup database."
                 )
 
             self.readers.append(
@@ -446,6 +442,7 @@ class CsSmokeCommand(StreamingCommand):
         for record, ip in buffer:
             entry = data_by_ip.get(ip)
             if entry:
+                entry = set_vpn(entry)
                 entry["query_time"] = query_time
                 entry["query_mode"] = mode
                 attach_resp_to_record(record, entry, self.ipfield, allowed_fields)

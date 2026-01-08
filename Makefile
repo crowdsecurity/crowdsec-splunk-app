@@ -1,4 +1,4 @@
-PYTHON=python3.9
+PYTHON=uv run python3.9
 SDK_VERSION=2.1.1
 TARGET_DIR=bin/splunklib
 TMP_DIR=/tmp/splunk-sdk
@@ -11,7 +11,7 @@ add-sdk:
 	mkdir -p $(TARGET_DIR)
 
 	@echo "==> Installing Splunk SDK version $(SDK_VERSION) using $(PYTHON)..."
-	$(PYTHON) -m pip install --no-deps --no-cache-dir --target=$(TMP_DIR) splunk-sdk==$(SDK_VERSION)
+	uv pip install --no-deps --no-cache-dir --target=$(TMP_DIR) splunk-sdk==$(SDK_VERSION)
 
 	@echo "==> Copying SDK to $(TARGET_DIR)..."
 	cp -r $(TMP_DIR)/splunklib/* $(TARGET_DIR)/
