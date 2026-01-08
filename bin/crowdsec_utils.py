@@ -43,19 +43,6 @@ def load_local_dump_settings(service):
 VPN_PROVIDER = ["m247", "Datacamp", "PacketHub", "Proton AG", "Clouvider limited"]
 
 
-import logging
-import sys
-
-logger = logging.getLogger("crowdsec_mmdb_downloader")
-logger.setLevel(logging.INFO)
-_handler = logging.StreamHandler(sys.stderr)
-_handler.setFormatter(
-    logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
-)
-logger.handlers = [_handler]
-logger.propagate = False
-
-
 def set_vpn(entry):
     as_name = entry.get("as_name")
     if not as_name:
