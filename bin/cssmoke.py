@@ -329,7 +329,11 @@ class CsSmokeCommand(StreamingCommand):
     def get_data_from_readers(self, ip):
         result = {}
         for reader in self.readers:
-            data = reader.get(ip)
+            try:
+                data = reader.get(ip)
+            except ValueError:
+                # don't fail if it is not a valid IP address
+                continue
             if not data:
                 continue
             result.update(data)

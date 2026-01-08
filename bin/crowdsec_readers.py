@@ -49,6 +49,7 @@ class Reader:
         if dump_type not in ALLOWED_DUMP_TYPES:
             raise ValueError(f"Invalid dump type: {dump_type}")
 
+        self.name = name
         self.output_filename = output_filename
         self.output_path = output_path
         self.dump_type = dump_type
