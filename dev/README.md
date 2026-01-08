@@ -142,6 +142,7 @@ Once you are ready to release a new version (e.g. when all your changes are on t
   - Each release description must respect the same format as the previous ones.
 - Update the `default/app.conf` file with the new version number.
 - Update the `appserver/static/javascript/setup_pages.js` file with the new version number.
+- Update the `bin/crowdsec_constants.py` file with the new version number.
 - Update the `app.manifest` file with the new version number by running the following command in the root folder of the project:
 
 ```bash

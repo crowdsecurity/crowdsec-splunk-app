@@ -1,0 +1,6 @@
+{
+    "api_key": "YOUR_API_KEY_HERE",
+    "batching": true,
+    "batch_size": 20,
+    "local_dump": true
+}

@@ -10,7 +10,7 @@ require.config({
       "../app/" + app_name + "/javascript/vendor/react-dom.production.min",
   },
   scriptType: "module",
-  urlArgs: "v=v1.2.4",
+  urlArgs: "v=v1.2.5",
 });
 
 require(["react", "ReactDOM", "myApp"], function (react, ReactDOM, myApp) {
