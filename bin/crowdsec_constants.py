@@ -1,4 +1,4 @@
-VERSION = "1.2.5"
+VERSION = "1.2.6"
 APP_NAME = "crowdsec-splunk-app"
 
 DEFAULT_SPLUNK_HOME = "/opt/splunk"

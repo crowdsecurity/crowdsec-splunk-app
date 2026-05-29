@@ -12,6 +12,15 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ---
 
+## [1.2.6](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.6) - 2026-05-29
+
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.5...v1.2.6)
+
+### Fixed
+
+- Add `python.required = true` to `commands.conf` stanzas to satisfy Splunk Cloud vetting requirements.
+
+
 ## [1.2.5](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.5) - 2026-01-08
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.4...v1.2.5)
