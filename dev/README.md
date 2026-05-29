@@ -5,18 +5,20 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-- [Local Development](#local-development)
-  - [Prepare local environment](#prepare-local-environment)
-  - [Run docker](#run-docker)
-  - [Test the app](#test-the-app)
-- [Test Javascript and CSS code](#test-javascript-and-css-code)
-- [Inspect your app locally](#inspect-your-app-locally)
-- [Some resources for developers](#some-resources-for-developers)
-- [Update documentation table of contents](#update-documentation-table-of-contents)
-- [Release process](#release-process)
-  - [Splunk SDK](#splunk-sdk)
-  - [Final check](#final-check)
-  - [Create a release](#create-a-release)
+- [Splunk SIEM CrowdSec App](#splunk-siem-crowdsec-app)
+  - [Developer guide](#developer-guide)
+  - [Local Development](#local-development)
+    - [Prepare local environment](#prepare-local-environment)
+    - [Run docker](#run-docker)
+    - [Test the app](#test-the-app)
+  - [Test Javascript and CSS code](#test-javascript-and-css-code)
+  - [Inspect your app locally](#inspect-your-app-locally)
+  - [Some resources for developers](#some-resources-for-developers)
+  - [Update documentation table of contents](#update-documentation-table-of-contents)
+  - [Release process](#release-process)
+    - [Splunk SDK](#splunk-sdk)
+    - [Final check](#final-check)
+    - [Create a release](#create-a-release)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -158,6 +160,7 @@ slim generate-manifest . --output=app.manifest
     - Click on `Run workflow` and fill the `Tag name` input with the new version number prefixed by a `v`: `vMAJOR.MINOR.PATCH`.
     - Tick the `Publish to Splunkbase` checkbox.
     - Click on `Run workflow` to trigger the release process.
+    - Update the default version in your https://splunkbase.splunk.com/ ask JDV
 
 
 
