@@ -12,6 +12,15 @@ Splunk app: i.e., all files and folders except ones that are ignored by the `.sl
 
 ---
 
+## [1.2.7](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.7) - 2026-08-07
+
+[_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.6...v1.2.7)
+
+### Fixed
+
+- Fix `python.required` value in `commands.conf` stanzas: use explicit version list `3.9, 3.13` instead of `true` to satisfy Splunk AppInspect `check_commands_conf_python_required`.
+
+
 ## [1.2.6](https://github.com/crowdsecurity/crowdsec-splunk-app/releases/tag/v1.2.6) - 2026-05-29
 
 [_Compare with previous release_](https://github.com/crowdsecurity/crowdsec-splunk-app/compare/v1.2.5...v1.2.6)
