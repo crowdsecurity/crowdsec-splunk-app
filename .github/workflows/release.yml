@@ -11,8 +11,8 @@ on:
         type: string
         required: true
         description: Splunk compatible versions
-        default: 9.4,9.3,9.2,9.1,9.0,8.2,8.1,8.0,7.3,7.2,7.1,7.0,10.0,10.1
-      publish-to-splunkbase:
+        default: 9.0,9.1,9.2,9.3,9.4,10.0,10.1,10.2,10.3,10.4,10.5
+      publish-to-splunkbae:
         type: boolean
         description: Publish to Splunkbase
         default: true
